@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>晚餐拉霸機</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app">
+    <header class="title">
+      <h1>今晚吃什麼？</h1>
+      <p class="sub">不用想，按下去就好</p>
+    </header>
+
+    <button id="drawAll" class="clay clay-pink clay-btn primary" type="button">🎲 直接給答案</button>
+
+    <section id="result" class="result" hidden aria-live="polite">
+      <div class="clay layer">
+        <span class="label">吃什麼</span>
+        <span class="value" id="meal"></span>
+      </div>
+      <div class="clay layer">
+        <span class="label">去哪吃</span>
+        <span class="value" id="place"></span>
+      </div>
+      <div class="clay layer">
+        <span class="label">點什麼</span>
+        <ul class="items" id="items"></ul>
+      </div>
+
+      <div class="clay summary" id="summary">
+        <div class="kcal"><span id="total"></span> 卡 <small>／目標 <span id="target"></span>・差距 <span id="diff"></span></small></div>
+        <p class="verdict" id="verdict"></p>
+      </div>
+    </section>
+
+    <p id="error" class="error" hidden></p>
+  </main>
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

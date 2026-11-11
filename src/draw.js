@@ -26,6 +26,12 @@ function kcalStatus(totalKcal, range) {
 export function draw(data, { target, rng = Math.random }) {
   const meal = pick(data.meals, rng);
   const place = pick(meal.places, rng);
+
+  // 沒有點什麼資料的去哪吃（例如便利商店、家裡煮）：只回傳兩層，不做熱量判定
+  if (!place.items?.length) {
+    return { meal: meal.name, place: place.name, items: [], target };
+  }
+
   const item = pick(place.items, rng);
   const items = [{ name: item.name, unit: item.unit, kcal: item.kcal, count: 1 }];
   const totalKcal = item.kcal;

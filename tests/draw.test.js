@@ -89,3 +89,42 @@ test('去哪吃只會從抽中的吃什麼底下選出', () => {
     assert.ok(meal.places.some((p) => p.name === r.place), `${r.meal} 底下沒有 ${r.place}`);
   }
 });
+
+test('去哪吃沒有點什麼資料時，結果沒有點什麼、也不帶熱量判定，且不報錯', () => {
+  const data = {
+    meals: [
+      {
+        name: '麵',
+        places: [{ name: '回家路上的便利商店' }, { name: '家裡煮麵', items: [] }],
+      },
+    ],
+  };
+  const rng = seeded(3);
+  for (let i = 0; i < 20; i++) {
+    const result = draw(data, { target: 500, rng });
+    assert.equal(result.meal, '麵');
+    assert.deepEqual(result.items, []);
+    assert.equal(result.totalKcal, undefined);
+    assert.equal(result.diff, undefined);
+    assert.equal(result.status, undefined);
+  }
+});
+
+test('同一個吃什麼底下混有「有點什麼」與「沒有點什麼」的去哪吃，各自依資料決定是否帶熱量', () => {
+  const data = { meals: [{ name: '麵', places: [{ name: '家裡煮麵' }, single('巷口麵店', 550)] }] };
+  const rng = seeded(11);
+  const seen = new Set();
+  for (let i = 0; i < 50; i++) {
+    const result = draw(data, { target: 500, rng });
+    seen.add(result.place);
+    if (result.place === '巷口麵店') {
+      assert.equal(result.items.length, 1);
+      assert.equal(result.totalKcal, 550);
+      assert.equal(result.status, 'within');
+    } else {
+      assert.deepEqual(result.items, []);
+      assert.equal(result.status, undefined);
+    }
+  }
+  assert.equal(seen.size, 2);
+});

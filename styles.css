@@ -17,6 +17,9 @@
 
 * { box-sizing: border-box; }
 
+/* 讓 hidden 屬性一定生效（.layer、.result 有設 display: flex，會蓋過瀏覽器預設） */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   min-height: 100vh;

@@ -16,10 +16,7 @@ function formatDiff(diff) {
   return diff > 0 ? `+${diff}` : String(diff);
 }
 
-function render(result) {
-  $('meal').textContent = result.meal;
-  $('place').textContent = result.place;
-
+function renderItems(result) {
   $('items').replaceChildren(
     ...result.items.map((item) => {
       const row = document.createElement('li');
@@ -32,12 +29,28 @@ function render(result) {
       return row;
     }),
   );
+}
 
+function renderSummary(result) {
   $('total').textContent = result.totalKcal;
   $('target').textContent = result.target;
   $('diff').textContent = formatDiff(result.diff);
   $('verdict').textContent = verdictByStatus[result.status](result);
   $('summary').dataset.status = result.status;
+}
+
+function render(result) {
+  $('meal').textContent = result.meal;
+  $('place').textContent = result.place;
+
+  // 沒有點什麼資料的去哪吃：只顯示兩層，不顯示點什麼與熱量方塊
+  const hasItems = result.items.length > 0;
+  $('itemsLayer').hidden = !hasItems;
+  $('summary').hidden = !hasItems;
+  if (hasItems) {
+    renderItems(result);
+    renderSummary(result);
+  }
 
   $('result').hidden = false;
 }

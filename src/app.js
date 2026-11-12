@@ -1,5 +1,5 @@
 // 畫面：讀資料檔、呼叫抽籤、顯示結果。抽籤規則全部在 draw.js。
-import { draw } from './draw.js';
+import { draw, listDistricts, districtLabel } from './draw.js';
 import { visibleLayers, revealedAfterReroll, ALL } from './reveal.js';
 
 const TARGET = 500; // 熱量目標；第 05 張票改成可設定
@@ -68,6 +68,38 @@ const setHint = (text) => {
   $('locationHint').textContent = text;
 };
 
+const selectedDistricts = () => [...document.querySelectorAll('#districtChips input:checked')].map((input) => input.value);
+
+// 行政區標籤：資料裡有店的區，可複選；選了任何一區，「只抽附近」就不套用（開關變灰）
+function setupDistrictChips(data) {
+  const districts = listDistricts(data);
+  $('districtBox').hidden = districts.length === 0;
+  // 選了任何行政區：「只抽附近」變灰並註明原因，舊的定位提示也不再適用
+  const syncNearbyToggle = () => {
+    const hasDistricts = selectedDistricts().length > 0;
+    $('nearby').disabled = hasDistricts;
+    $('nearbyLabel').classList.toggle('disabled', hasDistricts);
+    $('nearbyNote').textContent = hasDistricts ? '已選行政區' : '';
+    if (hasDistricts) setHint('');
+  };
+  $('districtChips').replaceChildren(
+    ...districts.map((district) => {
+      const label = document.createElement('label');
+      label.className = 'chip';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = district;
+      input.autocomplete = 'off';
+      input.addEventListener('change', syncNearbyToggle);
+      const text = document.createElement('span');
+      text.textContent = districtLabel(district);
+      label.append(input, text);
+      return label;
+    }),
+  );
+  syncNearbyToggle();
+}
+
 // 測試用：網址 ?lat=…&lng=… 指定假座標（畫面上沒有入口）
 function positionFromUrl() {
   const params = new URLSearchParams(location.search);
@@ -101,11 +133,16 @@ function requestLocation() {
 // 等待時顯示「定位中…」；抓不到時顯示提示並回傳 undefined（= 從全部店抽）。
 async function locateForDraw() {
   setHint('');
-  if (!$('nearby').checked) return undefined;
+  if (selectedDistricts().length > 0 || !$('nearby').checked) return undefined;
   const fake = positionFromUrl();
   if (fake) return fake;
   setHint(HINT_LOCATING);
   const found = await requestLocation();
+  // 等待定位時使用者改選了行政區：以行政區為準，不顯示定位提示
+  if (selectedDistricts().length > 0) {
+    setHint('');
+    return undefined;
+  }
   setHint(found ? '' : HINT_FAILED);
   return found;
 }
@@ -123,6 +160,8 @@ async function main() {
     $('drawStep').disabled = true;
     return;
   }
+
+  setupDistrictChips(data);
 
   // 定位在按下抽籤時才取得；「換」沿用最近一次抽籤的定位，不重新詢問，但開關關閉時從全部店換
   let position;
@@ -146,6 +185,7 @@ async function main() {
     target: TARGET,
     position: $('nearby').checked ? position : undefined,
     includeChains: $('chains').checked,
+    districts: selectedDistricts(),
     ...extra,
   });
 

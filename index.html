@@ -21,7 +21,12 @@
       <button id="drawStep" class="clay clay-btn primary step" type="button">👣 一步一步來</button>
     </div>
 
-    <label class="clay nearby"><input type="checkbox" id="nearby" checked autocomplete="off"> 只抽附近的店</label>
+    <fieldset id="districtBox" class="districts" hidden>
+      <legend>行政區（不選＝不限）</legend>
+      <div id="districtChips" class="chips"></div>
+    </fieldset>
+
+    <label id="nearbyLabel" class="clay nearby"><input type="checkbox" id="nearby" checked autocomplete="off" aria-label="只抽附近的店" aria-describedby="nearbyNote"> 只抽附近的店<span id="nearbyNote" class="note"></span></label>
     <label class="clay nearby"><input type="checkbox" id="chains" checked autocomplete="off"> 包含連鎖店與便利商店</label>
     <p id="locationHint" class="hint" role="status"></p>
     <p id="emptyMessage" class="clay notice" role="status" hidden>沒有符合條件的店。可以試試勾選「包含連鎖店與便利商店」，或關掉「只抽附近的店」。</p>

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { draw } from '../src/draw.js';
+import { draw, listDistricts, districtLabel } from '../src/draw.js';
 
 // 固定亂數：讓測試每次結果相同
 function seeded(seed) {
@@ -402,5 +402,101 @@ test('抽完後改了設定、已經沒有符合條件的店時，重抽回傳 n
   for (const reroll of ['meal', 'place', 'items']) {
     const options = { target: 500, rng: seeded(63), position: { lat: 0, lng: 0 }, includeChains: false, previous, reroll };
     assert.equal(draw(附近重抽資料, options), null);
+  }
+});
+
+// ---- 行政區篩選 ----
+const 新店 = '新北市新店區';
+const 中和 = '新北市中和區';
+function 區的店(name, district, northMeters) {
+  return { ...有座標(name, northMeters), district };
+}
+
+const 區資料 = {
+  meals: [
+    { name: '麵', places: [區的店('新店麵店', 新店, 1000), 區的店('中和麵店', 中和, 9000)] },
+    { name: '便當', places: [區的店('中和便當店', 中和, 9500)] },
+    { name: '滷味', places: [區的店('新店滷味1', 新店, 1200), 區的店('新店滷味2', 新店, 1300)] },
+    { name: '速食', places: [{ name: '麥當勞' }] },
+  ],
+};
+
+test('選一個行政區：只抽到該區的店（連鎖店照「包含連鎖店」參加）', () => {
+  assert.deepEqual(
+    [...placesSeen(區資料, { districts: [新店] })].sort(),
+    ['新店麵店', '新店滷味1', '新店滷味2', '麥當勞'].sort(),
+  );
+  assert.deepEqual(
+    [...placesSeen(區資料, { districts: [中和] })].sort(),
+    ['中和麵店', '中和便當店', '麥當勞'].sort(),
+  );
+});
+
+test('選多個行政區：兩區的店都參加；一個都不選＝不限', () => {
+  assert.equal(placesSeen(區資料, { districts: [新店, 中和] }).size, 6);
+  assert.equal(placesSeen(區資料, { districts: [] }).size, 6);
+});
+
+test('選了行政區就不看定位：定位在很遠的地方，仍抽得到選定區的店', () => {
+  const seen = placesSeen(區資料, { districts: [新店], position: { lat: 0, lng: 0 } });
+  assert.deepEqual([...seen].sort(), ['新店麵店', '新店滷味1', '新店滷味2', '麥當勞'].sort());
+});
+
+test('選了行政區、不包含連鎖店：只剩該區的店', () => {
+  assert.deepEqual(
+    [...placesSeen(區資料, { districts: [新店], includeChains: false })].sort(),
+    ['新店麵店', '新店滷味1', '新店滷味2'].sort(),
+  );
+});
+
+test('選了行政區：該區沒有店的吃什麼不參加，其餘吃什麼仍等機率', () => {
+  const rng = seeded(71);
+  const counts = { 麵: 0, 便當: 0, 滷味: 0, 速食: 0 };
+  const N = 9000;
+  for (let i = 0; i < N; i++) counts[draw(區資料, { target: 500, rng, districts: [新店] }).meal]++;
+  assert.equal(counts.便當, 0);
+  for (const name of ['麵', '滷味', '速食']) assert.ok(Math.abs(counts[name] / N - 1 / 3) < 0.03, `${name} 佔 ${counts[name] / N}`);
+});
+
+test('選了資料裡沒有店的行政區、又不包含連鎖店：回傳 null', () => {
+  assert.equal(draw(區資料, { target: 500, rng: seeded(72), districts: ['台北市北投區'], includeChains: false }), null);
+});
+
+test('選了行政區時重抽（換）：仍只在該區的店裡換，有別的選項就一定換到不同的', () => {
+  const rng = seeded(73);
+  for (let i = 0; i < 200; i++) {
+    const options = { target: 500, rng, districts: [新店], includeChains: false };
+    const previous = draw(區資料, { ...options, previous: undefined });
+    for (const reroll of ['meal', 'place']) {
+      const next = draw(區資料, { ...options, previous, reroll });
+      assert.ok(['新店麵店', '新店滷味1', '新店滷味2'].includes(next.place), `抽到 ${next.place}`);
+      if (reroll === 'meal') assert.notEqual(next.meal, previous.meal);
+    }
+    if (previous.meal === '滷味') {
+      assert.notEqual(draw(區資料, { ...options, previous, reroll: 'place' }).place, previous.place);
+    }
+  }
+});
+
+test('列出行政區：只列資料裡實際有店的區，不重複，沒有行政區的店不算', () => {
+  assert.deepEqual(listDistricts(區資料), [新店, 中和]);
+  assert.deepEqual(listDistricts({ meals: [{ name: '速食', places: [{ name: '麥當勞' }] }] }), []);
+});
+
+test('行政區的顯示名稱只留區名，不帶縣市', () => {
+  assert.equal(districtLabel('新北市新店區'), '新店區');
+  assert.equal(districtLabel('台北市北投區'), '北投區');
+  assert.equal(districtLabel('新竹縣竹北市'), '竹北市');
+});
+
+test('抽完後改了行政區再重抽（換）：只在新選的區裡換，原本的店不在新區時改抽新區的店', () => {
+  const rng = seeded(74);
+  const inZhonghe = ['中和麵店', '中和便當店'];
+  for (let i = 0; i < 200; i++) {
+    const previous = draw(區資料, { target: 500, rng, districts: [新店], includeChains: false });
+    for (const reroll of ['meal', 'place', 'items']) {
+      const next = draw(區資料, { target: 500, rng, districts: [中和], includeChains: false, previous, reroll });
+      assert.ok(inZhonghe.includes(next.place), `抽到 ${next.place}`);
+    }
   }
 });

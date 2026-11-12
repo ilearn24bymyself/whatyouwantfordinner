@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { listDistricts } from '../src/draw.js';
 
 // 資料檔的基本檢查：筆誤（座標只填一半、數值離譜）會讓「只抽附近」悄悄放行或篩錯，所以在這裡擋下
 const data = JSON.parse(readFileSync(new URL('../data/meals.json', import.meta.url), 'utf8'));
@@ -24,4 +25,18 @@ test('座標要嘛都沒有（不受距離限制），要嘛緯度經度成對�
       assert.ok(Number.isFinite(place.lng) && place.lng >= -180 && place.lng <= 180, `${place.name} 的經度不合理`);
     }
   }
+});
+
+test('有座標的去哪吃一定有行政區（格式為縣市加區），沒有座標的連鎖店不寫行政區', () => {
+  for (const place of places) {
+    if (place.lat !== undefined) {
+      assert.match(place.district ?? '', /^.+[市縣].+[區鄉鎮市]$/, `${place.name} 的行政區不見或格式不對`);
+    } else {
+      assert.equal(place.district, undefined, `${place.name} 沒有座標卻寫了行政區`);
+    }
+  }
+});
+
+test('資料檔實際列出的行政區是新店區與中和區（目前資料）', () => {
+  assert.deepEqual(listDistricts(data), ['新北市新店區', '新北市中和區']);
 });

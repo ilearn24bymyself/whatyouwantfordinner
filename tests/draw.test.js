@@ -288,12 +288,6 @@ test('附近沒有店的吃什麼不參加，其餘吃什麼仍等機率', () =>
   for (const name of ['A', 'B', 'D']) assert.ok(Math.abs(counts[name] / N - 1 / 3) < 0.03, `${name} 佔 ${counts[name] / N}`);
 });
 
-test('所有店都在半徑外、也沒有不受距離限制的店時，退回全部店，不報錯', () => {
-  const data = { meals: [{ name: '便當', places: [有座標('遠便當店', 5000)] }] };
-  const result = draw(data, { target: 500, rng: seeded(34), position: 原點 });
-  assert.equal(result.place, '遠便當店');
-});
-
 // 重抽（換）沿用定位：麵底下有 2 家附近的店與 1 家遠的店，速食是 2 個品牌
 const 附近重抽資料 = {
   meals: [
@@ -352,5 +346,61 @@ test('不給定位時，同樣的亂數抽出的結果跟給 undefined 完全一
     const without = draw(附近資料, { target: 500, rng: seeded(seed) });
     const withUndefined = draw(附近資料, { target: 500, rng: seeded(seed), position: undefined });
     assert.deepEqual(withUndefined, without);
+  }
+});
+
+// ---- 包含連鎖店與便利商店（沒有座標的去哪吃）----
+test('不包含連鎖店時，沒有座標的店不出現；包含時照原本規則', () => {
+  assert.deepEqual(
+    [...placesSeen(附近資料, { includeChains: false })].sort(),
+    ['近麵店', '遠麵店', '遠便當店'].sort(),
+  );
+  assert.deepEqual([...placesSeen(附近資料, { position: 原點, includeChains: false })], ['近麵店']);
+  assert.deepEqual(
+    [...placesSeen(附近資料, { includeChains: true })].sort(),
+    ['近麵店', '遠麵店', '遠便當店', '麥當勞', '漢堡王'].sort(),
+  );
+});
+
+test('篩完一個去哪吃都不剩時，回傳 null（沒有符合條件），不報錯、也不退回全部', () => {
+  assert.equal(draw(附近資料, { target: 500, rng: seeded(51), position: { lat: 0, lng: 0 }, includeChains: false }), null);
+  const onlyFar = { meals: [{ name: '便當', places: [有座標('遠便當店', 5000)] }] };
+  assert.equal(draw(onlyFar, { target: 500, rng: seeded(52), position: 原點 }), null);
+});
+
+test('不包含連鎖店時重抽（換）：仍只在符合條件的店裡換，且有別的選項就一定換到不同的', () => {
+  const rng = seeded(53);
+  for (let i = 0; i < 200; i++) {
+    const previous = draw(附近重抽資料, { target: 500, rng, position: 原點, includeChains: false });
+    assert.equal(previous.meal, '麵');
+    const byPlace = draw(附近重抽資料, { target: 500, rng, position: 原點, includeChains: false, previous, reroll: 'place' });
+    assert.ok(['近A', '近B'].includes(byPlace.place));
+    assert.notEqual(byPlace.place, previous.place);
+    // 只剩一個吃什麼可選時，重抽吃什麼維持原樣
+    const byMeal = draw(附近重抽資料, { target: 500, rng, position: 原點, includeChains: false, previous, reroll: 'meal' });
+    assert.equal(byMeal.meal, '麵');
+    assert.ok(['近A', '近B'].includes(byMeal.place));
+  }
+});
+
+test('抽完後改了設定再重抽：原本的店已不符合條件時，改抽符合條件的店，不報錯', () => {
+  const rng = seeded(61);
+  for (let i = 0; i < 100; i++) {
+    let previous;
+    do previous = draw(附近重抽資料, { target: 500, rng, position: 原點 });
+    while (previous.meal !== '速食');
+    for (const reroll of ['meal', 'place', 'items']) {
+      const next = draw(附近重抽資料, { target: 500, rng, position: 原點, includeChains: false, previous, reroll });
+      assert.equal(next.meal, '麵');
+      assert.ok(['近A', '近B'].includes(next.place), `抽到 ${next.place}`);
+    }
+  }
+});
+
+test('抽完後改了設定、已經沒有符合條件的店時，重抽回傳 null', () => {
+  const previous = draw(附近重抽資料, { target: 500, rng: seeded(62), position: 原點 });
+  for (const reroll of ['meal', 'place', 'items']) {
+    const options = { target: 500, rng: seeded(63), position: { lat: 0, lng: 0 }, includeChains: false, previous, reroll };
+    assert.equal(draw(附近重抽資料, options), null);
   }
 });

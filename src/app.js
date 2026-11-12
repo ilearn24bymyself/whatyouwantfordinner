@@ -130,13 +130,24 @@ async function main() {
   let current;
   let revealed;
   let stepByStep = false;
+  // result 是 null＝篩完沒有符合條件的店：顯示提示，不顯示結果
   const show = (result, nextRevealed) => {
     current = result;
     revealed = nextRevealed;
+    $('emptyMessage').hidden = result !== null;
+    if (result === null) {
+      $('result').hidden = true;
+      return;
+    }
     render(current, revealed);
   };
 
-  const drawOptions = (extra) => ({ target: TARGET, position: $('nearby').checked ? position : undefined, ...extra });
+  const drawOptions = (extra) => ({
+    target: TARGET,
+    position: $('nearby').checked ? position : undefined,
+    includeChains: $('chains').checked,
+    ...extra,
+  });
 
   // 按下抽籤：先取得定位（等待時按鈕變灰），再用同一套抽籤抽出完整結果
   const startDraw = async (isStepByStep) => {

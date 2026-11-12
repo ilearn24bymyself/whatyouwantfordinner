@@ -84,6 +84,7 @@ body {
 
 .nearby { display: flex; align-items: center; gap: 10px; padding: 12px 18px; font-weight: 800; cursor: pointer; }
 .nearby input { width: 1.2rem; height: 1.2rem; accent-color: var(--pink-b); }
+.notice { margin: 0; padding: 14px 18px; font-weight: 800; color: var(--warn-text); }
 .hint { margin: -8px 0 0; color: var(--warn-text); font-weight: 700; }
 .hint:empty { display: none; }
 

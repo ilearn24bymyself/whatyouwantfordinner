@@ -21,8 +21,10 @@
       <button id="drawStep" class="clay clay-btn primary step" type="button">👣 一步一步來</button>
     </div>
 
-    <label class="clay nearby"><input type="checkbox" id="nearby" checked> 只抽附近的店</label>
+    <label class="clay nearby"><input type="checkbox" id="nearby" checked autocomplete="off"> 只抽附近的店</label>
+    <label class="clay nearby"><input type="checkbox" id="chains" checked autocomplete="off"> 包含連鎖店與便利商店</label>
     <p id="locationHint" class="hint" role="status"></p>
+    <p id="emptyMessage" class="clay notice" role="status" hidden>沒有符合條件的店。可以試試勾選「包含連鎖店與便利商店」，或關掉「只抽附近的店」。</p>
 
     <section id="result" class="result" hidden aria-live="polite">
       <div class="clay layer" id="mealLayer">

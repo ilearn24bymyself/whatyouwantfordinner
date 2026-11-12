@@ -38,15 +38,18 @@ function distanceMeters(a, b) {
 
 const hasCoordinates = (place) => Number.isFinite(place.lat) && Number.isFinite(place.lng);
 
-// 只抽附近：留下附近的去哪吃與不受距離限制（沒有座標）的去哪吃；沒有任何去哪吃的吃什麼不參加。
-// 不給定位，或篩完什麼都不剩（資料裡沒有不受距離限制的店、附近又沒店）時，退回全部。
-function eligibleMeals(meals, position) {
-  if (!position) return meals;
-  const nearby = (place) => !hasCoordinates(place) || distanceMeters(position, place) <= NEARBY_RADIUS_M;
-  const pool = meals
-    .map((meal) => ({ ...meal, places: meal.places.filter(nearby) }))
+// 哪些去哪吃參加抽籤：
+// - 沒有座標（不受距離限制，例如連鎖店、便利商店）：includeChains 開著才參加
+// - 有座標：不給定位就都參加；給了定位只留附近的（只抽附近）
+// 沒有任何去哪吃的吃什麼不參加；全部都不剩時回傳空陣列（呼叫端顯示「沒有符合條件」，不退回全部）。
+function eligibleMeals(meals, { position, includeChains }) {
+  const wanted = (place) => {
+    if (!hasCoordinates(place)) return includeChains;
+    return !position || distanceMeters(position, place) <= NEARBY_RADIUS_M;
+  };
+  return meals
+    .map((meal) => ({ ...meal, places: meal.places.filter(wanted) }))
     .filter((meal) => meal.places.length > 0);
-  return pool.length > 0 ? pool : meals;
 }
 
 // 有別的選項時避開 avoidName（重抽一定看得到變化）；只剩它一個就照抽
@@ -59,15 +62,18 @@ function pickOther(list, rng, avoidName) {
 export const LAYERS = ['meal', 'place', 'items'];
 
 // reroll：要重抽哪一層，該層以下跟著重抽，以上保留 previous（上一次的抽籤結果）。
-// 沒給 previous = 三層全抽（一次抽完）。position 是定位 { lat, lng }，給了就只抽附近（見 eligibleMeals）。
-export function draw(data, { target, rng = Math.random, previous, reroll = 'meal', position }) {
+// 沒給 previous = 三層全抽（一次抽完）。position 是定位 { lat, lng }，給了就只抽附近；
+// includeChains 預設是，關掉就排除沒有座標的去哪吃（見 eligibleMeals）。
+// 篩完一個去哪吃都不剩時回傳 null（沒有符合條件）。
+export function draw(data, { target, rng = Math.random, previous, reroll = 'meal', position, includeChains = true }) {
   const level = LAYERS.indexOf(reroll);
   if (level < 0) throw new Error(`不認得的重抽層：${reroll}`);
   const keep = (layer) => Boolean(previous) && LAYERS.indexOf(layer) < level;
   // 正好是要重抽的那一層：避開上一次的結果
   const previousName = { meal: previous?.meal, place: previous?.place, items: previous?.items?.[0]?.name };
   const avoid = (layer) => (layer === reroll ? previousName[layer] : undefined);
-  const meals = eligibleMeals(data.meals, position);
+  const meals = eligibleMeals(data.meals, { position, includeChains });
+  if (meals.length === 0) return null;
 
   // 保留的層照名字找回來；找不到（例如資料檔改過）就當作重抽
   const meal = (keep('meal') && meals.find((m) => m.name === previous.meal)) || pickOther(meals, rng, avoid('meal'));

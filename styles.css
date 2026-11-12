@@ -75,6 +75,12 @@ body {
   font-weight: 800;
 }
 
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.modes .primary { font-size: 1.1rem; padding: 16px 8px; }
+.step { background: linear-gradient(145deg, var(--mint-a), var(--mint-b)); }
+
+.next { padding: 12px; font-size: 1.05rem; font-weight: 800; }
+
 .result { display: flex; flex-direction: column; gap: 14px; }
 
 .layer {

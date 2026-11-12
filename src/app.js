@@ -1,5 +1,6 @@
 // 畫面：讀資料檔、呼叫抽籤、顯示結果。抽籤規則全部在 draw.js。
 import { draw } from './draw.js';
+import { visibleLayers, revealedAfterReroll, ALL } from './reveal.js';
 
 const TARGET = 500; // 熱量目標；第 05 張票改成可設定
 
@@ -39,18 +40,20 @@ function renderSummary(result) {
   $('summary').dataset.status = result.status;
 }
 
-function render(result) {
+// revealed：揭曉到第幾層（一次抽完 = ALL）。沒有點什麼資料的去哪吃只有兩層，見 reveal.js
+function render(result, revealed) {
+  const visible = visibleLayers(result, revealed);
   $('meal').textContent = result.meal;
   $('place').textContent = result.place;
-
-  // 沒有點什麼資料的去哪吃：只顯示兩層，不顯示點什麼與熱量方塊
-  const hasItems = result.items.length > 0;
-  $('itemsLayer').hidden = !hasItems;
-  $('summary').hidden = !hasItems;
-  if (hasItems) {
+  $('mealLayer').hidden = !visible.meal;
+  $('placeLayer').hidden = !visible.place;
+  $('itemsLayer').hidden = !visible.items;
+  $('summary').hidden = !visible.items;
+  if (visible.items) {
     renderItems(result);
     renderSummary(result);
   }
+  $('next').hidden = visible.done;
 
   $('result').hidden = false;
 }
@@ -65,22 +68,41 @@ async function main() {
     $('error').textContent = `讀不到資料檔：${err.message}`;
     $('error').hidden = false;
     $('drawAll').disabled = true;
+    $('drawStep').disabled = true;
     return;
   }
 
   let current;
-  const show = (result) => {
+  let revealed;
+  let stepByStep = false;
+  const show = (result, nextRevealed) => {
     current = result;
-    render(result);
+    revealed = nextRevealed;
+    render(current, revealed);
   };
 
-  // 一次抽完
-  $('drawAll').addEventListener('click', () => show(draw(data, { target: TARGET })));
+  // 一次抽完：全部揭曉
+  $('drawAll').addEventListener('click', () => {
+    stepByStep = false;
+    show(draw(data, { target: TARGET }), ALL);
+  });
 
-  // 每一層的「換」：只重抽該層（含其下層），上層保留
+  // 逐層抽：用同一套抽籤先抽好完整結果，只揭曉第一層
+  $('drawStep').addEventListener('click', () => {
+    stepByStep = true;
+    show(draw(data, { target: TARGET }), 1);
+  });
+
+  $('next').addEventListener('click', () => show(current, revealed + 1));
+
+  // 每一層的「換」：只重抽該層（含其下層），上層保留；逐層抽時下層蓋回去
   for (const button of document.querySelectorAll('[data-reroll]')) {
+    const layer = button.dataset.reroll;
     button.addEventListener('click', () =>
-      show(draw(data, { target: TARGET, previous: current, reroll: button.dataset.reroll })),
+      show(
+        draw(data, { target: TARGET, previous: current, reroll: layer }),
+        stepByStep ? revealedAfterReroll(layer) : ALL,
+      ),
     );
   }
 }

@@ -16,15 +16,18 @@
       <p class="sub">不用想，按下去就好</p>
     </header>
 
-    <button id="drawAll" class="clay clay-pink clay-btn primary" type="button">🎲 直接給答案</button>
+    <div class="modes">
+      <button id="drawAll" class="clay clay-pink clay-btn primary" type="button">🎲 直接給答案</button>
+      <button id="drawStep" class="clay clay-btn primary step" type="button">👣 一步一步來</button>
+    </div>
 
     <section id="result" class="result" hidden aria-live="polite">
-      <div class="clay layer">
+      <div class="clay layer" id="mealLayer">
         <span class="label">吃什麼</span>
         <span class="value" id="meal"></span>
         <button class="clay-btn reroll" type="button" data-reroll="meal" aria-label="換吃什麼">換</button>
       </div>
-      <div class="clay layer">
+      <div class="clay layer" id="placeLayer">
         <span class="label">去哪吃</span>
         <span class="value" id="place"></span>
         <button class="clay-btn reroll" type="button" data-reroll="place" aria-label="換去哪吃">換</button>
@@ -39,6 +42,8 @@
         <div class="kcal"><span id="total"></span> 卡 <small>／目標 <span id="target"></span>・差距 <span id="diff"></span></small></div>
         <p class="verdict" id="verdict"></p>
       </div>
+
+      <button id="next" class="clay clay-btn next" type="button">揭曉下一層 👇</button>
     </section>
 
     <p id="error" class="error" hidden></p>

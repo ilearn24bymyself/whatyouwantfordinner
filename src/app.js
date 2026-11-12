@@ -58,12 +58,56 @@ function render(result, revealed) {
   $('result').hidden = false;
 }
 
-// 測試用：網址 ?lat=…&lng=… 指定假座標（畫面上沒有入口）。手機定位在第 11 張票加入。
+// 瀏覽器自己的逾時（定位已允許後最久等多久）與外層保底（含使用者還沒回應詢問視窗的時間，避免永遠卡住）
+const LOCATION_TIMEOUT_MS = 10000;
+const LOCATION_GIVE_UP_MS = 15000;
+const HINT_LOCATING = '定位中…';
+const HINT_FAILED = '抓不到位置，改從全部店抽';
+
+const setHint = (text) => {
+  $('locationHint').textContent = text;
+};
+
+// 測試用：網址 ?lat=…&lng=… 指定假座標（畫面上沒有入口）
 function positionFromUrl() {
   const params = new URLSearchParams(location.search);
   const lat = parseFloat(params.get('lat'));
   const lng = parseFloat(params.get('lng'));
   return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : undefined;
+}
+
+// 向手機要目前位置；拒絕、逾時、不支援、出錯都回 undefined（呼叫端會改從全部店抽）
+function requestLocation() {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(undefined), LOCATION_GIVE_UP_MS);
+    const finish = (position) => {
+      clearTimeout(timer);
+      resolve(position);
+    };
+    try {
+      if (!navigator.geolocation) return finish(undefined);
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => finish({ lat: coords.latitude, lng: coords.longitude }),
+        () => finish(undefined),
+        { timeout: LOCATION_TIMEOUT_MS },
+      );
+    } catch {
+      finish(undefined);
+    }
+  });
+}
+
+// 這次抽籤要用的定位：開關關閉 → 不抽附近（也不詢問）；網址有假座標 → 用假座標；其餘向手機要。
+// 等待時顯示「定位中…」；抓不到時顯示提示並回傳 undefined（= 從全部店抽）。
+async function locateForDraw() {
+  setHint('');
+  if (!$('nearby').checked) return undefined;
+  const fake = positionFromUrl();
+  if (fake) return fake;
+  setHint(HINT_LOCATING);
+  const found = await requestLocation();
+  setHint(found ? '' : HINT_FAILED);
+  return found;
 }
 
 async function main() {
@@ -80,8 +124,9 @@ async function main() {
     return;
   }
 
-  // 每次抽籤都帶的共同參數（第 11 張票起，定位在按下抽籤時才取得）
-  const baseOptions = { target: TARGET, position: positionFromUrl() };
+  // 定位在按下抽籤時才取得；「換」沿用最近一次抽籤的定位，不重新詢問，但開關關閉時從全部店換
+  let position;
+  let locating = false;
   let current;
   let revealed;
   let stepByStep = false;
@@ -91,29 +136,37 @@ async function main() {
     render(current, revealed);
   };
 
-  // 一次抽完：全部揭曉
-  $('drawAll').addEventListener('click', () => {
-    stepByStep = false;
-    show(draw(data, baseOptions), ALL);
-  });
+  const drawOptions = (extra) => ({ target: TARGET, position: $('nearby').checked ? position : undefined, ...extra });
 
-  // 逐層抽：用同一套抽籤先抽好完整結果，只揭曉第一層
-  $('drawStep').addEventListener('click', () => {
-    stepByStep = true;
-    show(draw(data, baseOptions), 1);
-  });
+  // 按下抽籤：先取得定位（等待時按鈕變灰），再用同一套抽籤抽出完整結果
+  const startDraw = async (isStepByStep) => {
+    if (locating) return;
+    locating = true;
+    $('drawAll').disabled = true;
+    $('drawStep').disabled = true;
+    try {
+      position = await locateForDraw();
+    } finally {
+      locating = false;
+      $('drawAll').disabled = false;
+      $('drawStep').disabled = false;
+    }
+    stepByStep = isStepByStep;
+    // 一次抽完：全部揭曉；逐層抽：只揭曉第一層
+    show(draw(data, drawOptions()), isStepByStep ? 1 : ALL);
+  };
+  $('drawAll').addEventListener('click', () => startDraw(false));
+  $('drawStep').addEventListener('click', () => startDraw(true));
 
   $('next').addEventListener('click', () => show(current, revealed + 1));
 
   // 每一層的「換」：只重抽該層（含其下層），上層保留；逐層抽時下層蓋回去
   for (const button of document.querySelectorAll('[data-reroll]')) {
     const layer = button.dataset.reroll;
-    button.addEventListener('click', () =>
-      show(
-        draw(data, { ...baseOptions, previous: current, reroll: layer }),
-        stepByStep ? revealedAfterReroll(layer) : ALL,
-      ),
-    );
+    button.addEventListener('click', () => {
+      if (locating) return;
+      show(draw(data, drawOptions({ previous: current, reroll: layer })), stepByStep ? revealedAfterReroll(layer) : ALL);
+    });
   }
 }
 

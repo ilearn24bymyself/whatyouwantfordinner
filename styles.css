@@ -12,6 +12,7 @@
   --warn-b: #ffc078;
   --blue-a: #d4ecf5;
   --blue-b: #bcdcea;
+  --warn-text: #b45309;
   --radius: 20px;
 }
 
@@ -80,6 +81,11 @@ body {
 .step { background: linear-gradient(145deg, var(--mint-a), var(--mint-b)); }
 
 .next { padding: 12px; font-size: 1.05rem; font-weight: 800; }
+
+.nearby { display: flex; align-items: center; gap: 10px; padding: 12px 18px; font-weight: 800; cursor: pointer; }
+.nearby input { width: 1.2rem; height: 1.2rem; accent-color: var(--pink-b); }
+.hint { margin: -8px 0 0; color: var(--warn-text); font-weight: 700; }
+.hint:empty { display: none; }
 
 .result { display: flex; flex-direction: column; gap: 14px; }
 

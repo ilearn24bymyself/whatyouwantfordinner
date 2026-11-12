@@ -58,6 +58,14 @@ function render(result, revealed) {
   $('result').hidden = false;
 }
 
+// 測試用：網址 ?lat=…&lng=… 指定假座標（畫面上沒有入口）。手機定位在第 11 張票加入。
+function positionFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const lat = parseFloat(params.get('lat'));
+  const lng = parseFloat(params.get('lng'));
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : undefined;
+}
+
 async function main() {
   let data;
   try {
@@ -72,6 +80,8 @@ async function main() {
     return;
   }
 
+  // 每次抽籤都帶的共同參數（第 11 張票起，定位在按下抽籤時才取得）
+  const baseOptions = { target: TARGET, position: positionFromUrl() };
   let current;
   let revealed;
   let stepByStep = false;
@@ -84,13 +94,13 @@ async function main() {
   // 一次抽完：全部揭曉
   $('drawAll').addEventListener('click', () => {
     stepByStep = false;
-    show(draw(data, { target: TARGET }), ALL);
+    show(draw(data, baseOptions), ALL);
   });
 
   // 逐層抽：用同一套抽籤先抽好完整結果，只揭曉第一層
   $('drawStep').addEventListener('click', () => {
     stepByStep = true;
-    show(draw(data, { target: TARGET }), 1);
+    show(draw(data, baseOptions), 1);
   });
 
   $('next').addEventListener('click', () => show(current, revealed + 1));
@@ -100,7 +110,7 @@ async function main() {
     const layer = button.dataset.reroll;
     button.addEventListener('click', () =>
       show(
-        draw(data, { target: TARGET, previous: current, reroll: layer }),
+        draw(data, { ...baseOptions, previous: current, reroll: layer }),
         stepByStep ? revealedAfterReroll(layer) : ALL,
       ),
     );

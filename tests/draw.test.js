@@ -226,3 +226,131 @@ test('重抽的層名稱打錯時直接報錯，不默默變成全部重抽', ()
   const previous = draw(重抽資料, { target: 500, rng: seeded(1) });
   assert.throws(() => draw(重抽資料, { target: 500, rng: seeded(2), previous, reroll: 'plcae' }));
 });
+
+// ---- 只抽附近（定位）----
+// 以原點正北方 m 公尺的座標，用來造出剛好在半徑 3000 公尺內、外的店（1 度緯度約 111,195 公尺）
+const 原點 = { lat: 25, lng: 121 };
+const 北方 = (m) => 25 + m / 111195;
+function 有座標(name, northMeters, items) {
+  const place = { name, lat: 北方(northMeters), lng: 121 };
+  return items ? { ...place, mode: 'single', items } : place;
+}
+
+const 附近資料 = {
+  meals: [
+    { name: '麵', places: [有座標('近麵店', 2995), 有座標('遠麵店', 3005)] },
+    { name: '便當', places: [有座標('遠便當店', 5000)] },
+    { name: '速食', places: [{ name: '麥當勞' }, { name: '漢堡王' }] },
+  ],
+};
+
+function placesSeen(data, options, n = 600) {
+  const rng = seeded(31);
+  const seen = new Set();
+  for (let i = 0; i < n; i++) seen.add(draw(data, { target: 500, rng, ...options }).place);
+  return seen;
+}
+
+test('不給定位時，所有店都參加（行為與沒有定位功能時相同）', () => {
+  assert.deepEqual(
+    [...placesSeen(附近資料, {})].sort(),
+    ['近麵店', '遠麵店', '遠便當店', '麥當勞', '漢堡王'].sort(),
+  );
+});
+
+test('給定位時，半徑 3 公里內的店與沒有座標的店參加，半徑外的店不參加', () => {
+  assert.deepEqual([...placesSeen(附近資料, { position: 原點 })].sort(), ['近麵店', '麥當勞', '漢堡王'].sort());
+});
+
+test('離所有有座標的店都很遠時，仍抽得到沒有座標的店，不報錯', () => {
+  const rng = seeded(32);
+  for (let i = 0; i < 100; i++) {
+    const result = draw(附近資料, { target: 500, rng, position: { lat: 0, lng: 0 } });
+    assert.equal(result.meal, '速食');
+    assert.ok(['麥當勞', '漢堡王'].includes(result.place));
+  }
+});
+
+test('附近沒有店的吃什麼不參加，其餘吃什麼仍等機率', () => {
+  const data = {
+    meals: [
+      { name: 'A', places: [有座標('A店', 1000)] },
+      { name: 'B', places: [有座標('B店1', 1500), 有座標('B店2', 2000)] },
+      { name: 'C', places: [有座標('C店', 9000)] },
+      { name: 'D', places: [{ name: 'D品牌' }] },
+    ],
+  };
+  const rng = seeded(33);
+  const counts = { A: 0, B: 0, C: 0, D: 0 };
+  const N = 9000;
+  for (let i = 0; i < N; i++) counts[draw(data, { target: 500, rng, position: 原點 }).meal]++;
+  assert.equal(counts.C, 0);
+  for (const name of ['A', 'B', 'D']) assert.ok(Math.abs(counts[name] / N - 1 / 3) < 0.03, `${name} 佔 ${counts[name] / N}`);
+});
+
+test('所有店都在半徑外、也沒有不受距離限制的店時，退回全部店，不報錯', () => {
+  const data = { meals: [{ name: '便當', places: [有座標('遠便當店', 5000)] }] };
+  const result = draw(data, { target: 500, rng: seeded(34), position: 原點 });
+  assert.equal(result.place, '遠便當店');
+});
+
+// 重抽（換）沿用定位：麵底下有 2 家附近的店與 1 家遠的店，速食是 2 個品牌
+const 附近重抽資料 = {
+  meals: [
+    {
+      name: '麵',
+      places: [
+        有座標('近A', 2000, [{ name: 'A1', unit: '1 碗', kcal: 500 }, { name: 'A2', unit: '1 碗', kcal: 520 }]),
+        有座標('近B', 2500, [{ name: 'B1', unit: '1 碗', kcal: 480 }, { name: 'B2', unit: '1 碗', kcal: 510 }]),
+        有座標('遠C', 4000, [{ name: 'C1', unit: '1 碗', kcal: 490 }]),
+      ],
+    },
+    { name: '速食', places: [{ name: '麥當勞' }, { name: '漢堡王' }] },
+  ],
+};
+
+function drawNearbyUntil(rng, predicate) {
+  let result;
+  do result = draw(附近重抽資料, { target: 500, rng, position: 原點 });
+  while (!predicate(result));
+  return result;
+}
+
+test('給定位時重抽「吃什麼」：一定換成另一個吃什麼，且仍在篩選範圍內', () => {
+  const rng = seeded(41);
+  for (let i = 0; i < 200; i++) {
+    const previous = drawNearbyUntil(rng, () => true);
+    const next = draw(附近重抽資料, { target: 500, rng, position: 原點, previous, reroll: 'meal' });
+    assert.notEqual(next.meal, previous.meal);
+    if (next.meal === '麵') assert.ok(['近A', '近B'].includes(next.place), `抽到 ${next.place}`);
+  }
+});
+
+test('給定位時重抽「去哪吃」：吃什麼不變，換成另一家附近的店，不會抽到半徑外的店', () => {
+  const rng = seeded(42);
+  for (let i = 0; i < 200; i++) {
+    const previous = drawNearbyUntil(rng, (r) => r.meal === '麵');
+    const next = draw(附近重抽資料, { target: 500, rng, position: 原點, previous, reroll: 'place' });
+    assert.equal(next.meal, '麵');
+    assert.notEqual(next.place, previous.place);
+    assert.ok(['近A', '近B'].includes(next.place), `抽到 ${next.place}`);
+  }
+});
+
+test('給定位時重抽「點什麼」：吃什麼與去哪吃不變，點什麼一定換成另一份', () => {
+  const rng = seeded(43);
+  for (let i = 0; i < 200; i++) {
+    const previous = drawNearbyUntil(rng, (r) => r.place === '近A');
+    const next = draw(附近重抽資料, { target: 500, rng, position: 原點, previous, reroll: 'items' });
+    assert.equal(next.place, '近A');
+    assert.notEqual(next.items[0].name, previous.items[0].name);
+  }
+});
+
+test('不給定位時，同樣的亂數抽出的結果跟給 undefined 完全一樣', () => {
+  for (let seed = 1; seed <= 50; seed++) {
+    const without = draw(附近資料, { target: 500, rng: seeded(seed) });
+    const withUndefined = draw(附近資料, { target: 500, rng: seeded(seed), position: undefined });
+    assert.deepEqual(withUndefined, without);
+  }
+});

@@ -68,8 +68,21 @@ async function main() {
     return;
   }
 
+  let current;
+  const show = (result) => {
+    current = result;
+    render(result);
+  };
+
   // 一次抽完
-  $('drawAll').addEventListener('click', () => render(draw(data, { target: TARGET })));
+  $('drawAll').addEventListener('click', () => show(draw(data, { target: TARGET })));
+
+  // 每一層的「換」：只重抽該層（含其下層），上層保留
+  for (const button of document.querySelectorAll('[data-reroll]')) {
+    button.addEventListener('click', () =>
+      show(draw(data, { target: TARGET, previous: current, reroll: button.dataset.reroll })),
+    );
+  }
 }
 
 main();

@@ -128,3 +128,101 @@ test('同一個吃什麼底下混有「有點什麼」與「沒有點什麼」�
   }
   assert.equal(seen.size, 2);
 });
+
+// 重抽用的資料：兩個吃什麼，各有多個去哪吃，去哪吃各有多個點什麼
+const 重抽資料 = {
+  meals: [
+    {
+      name: '麵',
+      places: [
+        { name: '麵店A', mode: 'single', items: [{ name: 'A1', unit: '1 碗', kcal: 500 }, { name: 'A2', unit: '1 碗', kcal: 520 }] },
+        { name: '麵店B', mode: 'single', items: [{ name: 'B1', unit: '1 碗', kcal: 480 }, { name: 'B2', unit: '1 碗', kcal: 510 }] },
+        { name: '家裡煮麵' },
+      ],
+    },
+    {
+      name: '便當',
+      places: [
+        { name: '便當店C', mode: 'single', items: [{ name: 'C1', unit: '1 份', kcal: 800 }, { name: 'C2', unit: '1 份', kcal: 850 }] },
+      ],
+    },
+  ],
+};
+
+// 一直抽到符合條件為止，用來準備「上一次的結果」
+function drawUntil(rng, predicate) {
+  let result;
+  do result = draw(重抽資料, { target: 500, rng });
+  while (!predicate(result));
+  return result;
+}
+
+function findMeal(name) {
+  return 重抽資料.meals.find((m) => m.name === name);
+}
+
+test('重抽「去哪吃」時，吃什麼不變；有別的去哪吃時一定換掉，點什麼來自新的去哪吃', () => {
+  const rng = seeded(21);
+  for (let i = 0; i < 200; i++) {
+    const previous = drawUntil(rng, (r) => r.meal === '麵');
+    const next = draw(重抽資料, { target: 500, rng, previous, reroll: 'place' });
+    assert.equal(next.meal, '麵');
+    assert.notEqual(next.place, previous.place);
+    const place = findMeal('麵').places.find((p) => p.name === next.place);
+    assert.ok(place, `麵底下沒有 ${next.place}`);
+    for (const item of next.items) assert.ok(place.items.some((candidate) => candidate.name === item.name));
+  }
+});
+
+test('重抽「點什麼」時，吃什麼與去哪吃都不變，點什麼一定換成同一個去哪吃的另一份', () => {
+  const rng = seeded(22);
+  for (let i = 0; i < 200; i++) {
+    const previous = drawUntil(rng, (r) => r.place === '麵店A');
+    const next = draw(重抽資料, { target: 500, rng, previous, reroll: 'items' });
+    assert.equal(next.meal, '麵');
+    assert.equal(next.place, '麵店A');
+    assert.ok(['A1', 'A2'].includes(next.items[0].name));
+    assert.notEqual(next.items[0].name, previous.items[0].name);
+  }
+});
+
+test('重抽「吃什麼」時，一定換成別的吃什麼，去哪吃與點什麼都屬於新的吃什麼', () => {
+  const rng = seeded(23);
+  for (let i = 0; i < 200; i++) {
+    const previous = draw(重抽資料, { target: 500, rng });
+    const next = draw(重抽資料, { target: 500, rng, previous, reroll: 'meal' });
+    assert.notEqual(next.meal, previous.meal);
+    const place = findMeal(next.meal).places.find((p) => p.name === next.place);
+    assert.ok(place, `${next.meal} 底下沒有 ${next.place}`);
+    for (const item of next.items) assert.ok(place.items.some((candidate) => candidate.name === item.name));
+  }
+});
+
+test('吃什麼底下只有 1 個去哪吃時，重抽「去哪吃」不出錯，維持同一個去哪吃並重配點什麼', () => {
+  const rng = seeded(24);
+  const seenItems = new Set();
+  for (let i = 0; i < 100; i++) {
+    const previous = drawUntil(rng, (r) => r.meal === '便當');
+    const next = draw(重抽資料, { target: 500, rng, previous, reroll: 'place' });
+    assert.equal(next.meal, '便當');
+    assert.equal(next.place, '便當店C');
+    seenItems.add(next.items[0].name);
+  }
+  assert.equal(seenItems.size, 2);
+});
+
+test('只有一個選項可換時，重抽維持原樣不出錯', () => {
+  const data = { meals: [{ name: '沙威瑪', places: [single('沙威瑪店')] }] };
+  const previous = draw(data, { target: 500, rng: seeded(1) });
+  for (const reroll of ['meal', 'place', 'items']) {
+    const next = draw(data, { target: 500, rng: seeded(2), previous, reroll });
+    assert.equal(next.meal, '沙威瑪');
+    assert.equal(next.place, '沙威瑪店');
+    assert.equal(next.items[0].name, '沙威瑪店的餐');
+  }
+});
+
+test('重抽的層名稱打錯時直接報錯，不默默變成全部重抽', () => {
+  const previous = draw(重抽資料, { target: 500, rng: seeded(1) });
+  assert.throws(() => draw(重抽資料, { target: 500, rng: seeded(2), previous, reroll: 'plcae' }));
+});

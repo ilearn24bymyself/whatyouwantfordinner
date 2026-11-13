@@ -115,3 +115,25 @@ test('輸出的檔案文字：一家店一行、可以被讀回、跟資料檔�
   assert.ok(text.endsWith('\n'));
   assert.match(text, /\{ "name": "新店", "district": "台北市士林區", "address": "某路1號", "hours": \[\["11:00-14:00"\], \[\], /);
 });
+
+test('匯入結果不能是零家店（空檔、只有標題列、全部刪光）：擋下並說明，不產生結果', () => {
+  for (const rows of [[], [{ 類別: '', 店名: '' }]]) {
+    const result = planImport(data, rows);
+    assert.equal(result.data, undefined);
+    assert.match(result.errors[0].message, /至少/);
+  }
+});
+
+test('錯誤帶店名（管理頁用店名而不是列號指出問題）；連鎖欄的錯誤說明「是」或留空，「否」也接受', () => {
+  const result = planImport({ meals: [] }, [{ 類別: '麵', 店名: 'A', 連鎖: '也許', 行政區: '台北市北投區' }]);
+  assert.equal(result.errors[0].name, 'A');
+  assert.match(result.errors[0].message, /是/);
+  assert.match(result.errors[0].message, /否/);
+  assert.deepEqual(planImport({ meals: [] }, [{ 類別: '麵', 店名: 'A', 連鎖: '否', 行政區: '台北市北投區' }]).errors, []);
+});
+
+test('資料檔裡鍵的順序不同，也不會把沒改的店誤判成更新', () => {
+  const shuffled = { meals: [{ name: '麵', places: [{ district: '台北市北投區', name: 'A' }] }] };
+  const result = planImport(shuffled, placesToRows(shuffled));
+  assert.deepEqual(result.plan, { added: [], updated: [], removed: [], unchanged: 1 });
+});

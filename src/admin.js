@@ -15,7 +15,9 @@ function show(el, text) {
   el.hidden = !text;
 }
 const message = (text) => show($('adminMessage'), text);
-const errorLine = (e) => `第 ${e.row} 列「${e.column}」：${e.message}`;
+// 從 Excel 匯入時列號就是 Excel 的列；管理頁自己的儲存沒有 Excel 列，改用店名指出是哪一家
+const errorLine = (e) => (e.name ? `「${e.name}」的「${e.column}」：${e.message}` : `「${e.column}」：${e.message}`);
+const importErrorLine = (e) => `第 ${e.row} 列「${e.column}」：${e.message}`;
 const failText = (res) => (res.json?.errors ?? []).map(errorLine).join('；') || res.json?.error || '未知錯誤';
 const option = (value) => Object.assign(document.createElement('option'), { value });
 
@@ -153,7 +155,7 @@ async function submitForm(event) {
 async function previewImport(file) {
   const res = await call('/api/import-excel', { method: 'POST', body: await file.arrayBuffer() });
   if (!res.ok) {
-    const lines = (res.json?.errors ?? [{ message: res.json?.error ?? '匯入失敗' }]).map((e) => (e.row ? errorLine(e) : e.message));
+    const lines = (res.json?.errors ?? [{ message: res.json?.error ?? '匯入失敗' }]).map((e) => (e.row ? importErrorLine(e) : e.message));
     show($('adminError'), `匯入失敗，資料檔沒有任何改動：\n${lines.join('\n')}`);
     return;
   }

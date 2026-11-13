@@ -10,7 +10,9 @@ const MINUTES_PER_DAY = 1440;
 const RANGE = /(\d{1,2}):(\d{2})\s*(?:-|–|—|~|～|到|至)\s*(\d{1,2}):(\d{2})/g;
 const SEPARATORS = /[\s、,，;；/]/g;
 // 一行以星期開頭：「星期五 …」「週五 …」「五、…」「五 …」
-const DAY_LINE = /^\s*(?:(?:星期|週|周|禮拜)\s*)?([日一二三四五六天])\s*[、,，:：\s]\s*(.*)$/;
+// 有「星期／週」開頭時，後面可以不留空格（「星期五11:00-14:00」）；只有一個字（「五、…」）時一定要有分隔
+const DAY_LINE_PREFIXED = /^\s*(?:星期|週|周|禮拜)\s*([日一二三四五六天])\s*[、,，:]?\s*(.*)$/;
+const DAY_LINE_SHORT = /^\s*([日一二三四五六天])\s*[、,，:\s]\s*(.*)$/;
 
 const pad = (n) => String(n).padStart(2, '0');
 const clock = (minutes) => `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
@@ -67,18 +69,22 @@ function parseGoogleLines(lines) {
 }
 
 // 回傳 { hours: 每週時間 }、{ hours: undefined }（留空＝隨時營業）或 { error: 原因 }
-export function parseHours({ hours: text = '', closedDays = '' } = {}) {
+export function parseHours({ hours: rawText = '', closedDays = '' } = {}) {
+  const text = rawText.replace(/：/g, ':'); // 全形冒號當半形
   if (!text.trim()) {
     return closedDays.trim() ? { error: '有填公休，但沒有填營業時間' } : { hours: undefined };
   }
   const dayLines = text
     .split(/\r?\n/)
-    .map((line) => line.match(DAY_LINE))
+    .map((line) => line.match(DAY_LINE_PREFIXED) ?? line.match(DAY_LINE_SHORT))
     .filter(Boolean)
     .map((m) => ({ day: m[1] === '天' ? 0 : DAY_LABELS.indexOf(m[1]), rest: m[2] }));
-  if (dayLines.length > 0) return parseGoogleLines(dayLines);
+  if (dayLines.length > 0) {
+    if (closedDays.trim()) return { error: '貼 Google 七行時，每天的時間已經寫在裡面，不用再填公休欄（請清掉公休欄）' };
+    return parseGoogleLines(dayLines);
+  }
 
-  const sessions = parseSessions(text);
+  const sessions = /24\s*小時/.test(text) ? { sessions: ['00:00-24:00'] } : parseSessions(text);
   if (sessions.error) return sessions;
   const closed = parseClosedDays(closedDays);
   if (closed.error) return closed;

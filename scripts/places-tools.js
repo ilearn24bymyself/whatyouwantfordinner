@@ -1,9 +1,8 @@
 // 名單維護的流程：匯出、匯入（含確認、備份、寫檔）。命令列檔案與測試都從這裡進來。
-import { readFileSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
-import { placesToRows, planImport, serializeData } from '../src/places-sheet.js';
+import { existsSync } from 'node:fs';
+import { placesToRows } from '../src/places-sheet.js';
 import { writeSheet, readSheet } from './excel-io.js';
-
-const readData = (dataPath) => JSON.parse(readFileSync(dataPath, 'utf8'));
+import { readData, planRows, writeData } from './data-store.js';
 
 export function exportExcel({ dataPath, sheetPath, log = console.log }) {
   const rows = placesToRows(readData(dataPath));
@@ -25,7 +24,7 @@ export async function importExcel({ dataPath, sheetPath, confirm, log = console.
     log(`無法匯入：${sheet.error}`);
     return { status: 'error' };
   }
-  const result = planImport(readData(dataPath), sheet.rows);
+  const result = planRows(dataPath, sheet.rows);
   if (result.errors.length) {
     log(`匯入失敗，共 ${result.errors.length} 個問題，資料檔沒有任何改動：`);
     for (const e of result.errors) log(`  第 ${e.row} 列「${e.column}」：${e.message}`);
@@ -44,8 +43,7 @@ export async function importExcel({ dataPath, sheetPath, confirm, log = console.
     log('已取消，資料檔沒有任何改動。');
     return { status: 'cancelled' };
   }
-  copyFileSync(dataPath, `${dataPath}.bak`); // 寫入前備份一份（不進 git）
-  writeFileSync(dataPath, serializeData(result.data));
+  writeData(dataPath, result.data);
   log(`已寫入 ${dataPath}（原檔備份在 ${dataPath}.bak）。記得 commit。`);
   return { status: 'applied', plan: result.plan };
 }

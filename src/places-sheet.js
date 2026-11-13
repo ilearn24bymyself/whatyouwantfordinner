@@ -48,7 +48,7 @@ function parseRow(row) {
   if (!meal) fail('類別', '沒有填類別');
   if (!name) fail('店名', '沒有填店名');
   const chainText = get('連鎖');
-  if (chainText && !['是', '否'].includes(chainText)) fail('連鎖', `連鎖欄只能填「是」或留空，不能填「${chainText}」`);
+  if (chainText && !['是', '否'].includes(chainText)) fail('連鎖', `連鎖欄是連鎖店就填「是」，不是就留空（填「否」也可以），不能填「${chainText}」`);
   const place = { name };
   if (chainText === '是') {
     const filled = ['行政區', '地址', '座標', '營業時間', '公休'].filter((column) => get(column));
@@ -68,7 +68,7 @@ function parseRow(row) {
     if (parsed.error) fail('營業時間', parsed.error);
     else if (parsed.hours) place.hours = parsed.hours;
   }
-  return errors.length ? { errors } : { meal, place };
+  return errors.length ? { errors: errors.map((e) => ({ ...e, name })) } : { meal, place };
 }
 
 const ordered = (place, old) => {
@@ -96,13 +96,14 @@ export function planImport(data, rows) {
       return;
     }
     if (seen.has(parsed.place.name)) {
-      errors.push({ row: rowNumber, column: '店名', message: `店名「${parsed.place.name}」重複出現` });
+      errors.push({ row: rowNumber, column: '店名', name: parsed.place.name, message: `店名「${parsed.place.name}」重複出現` });
       return;
     }
     seen.add(parsed.place.name);
     if (!meals.has(parsed.meal)) meals.set(parsed.meal, []);
     meals.get(parsed.meal).push(ordered(parsed.place, old.get(parsed.place.name)?.place));
   });
+  if (!errors.length && meals.size === 0) errors.push({ row: 2, column: '店名', message: '名單不能是空的，至少要留一家店' });
   if (errors.length) return { errors, plan: undefined, data: undefined };
 
   const plan = { added: [], updated: [], removed: [], unchanged: 0 };
@@ -110,7 +111,7 @@ export function planImport(data, rows) {
     for (const place of places) {
       const before = old.get(place.name);
       if (!before) plan.added.push(place.name);
-      else if (before.meal !== mealName || JSON.stringify(before.place) !== JSON.stringify(place)) plan.updated.push(place.name);
+      else if (before.meal !== mealName || JSON.stringify(ordered(before.place, before.place)) !== JSON.stringify(place)) plan.updated.push(place.name);
       else plan.unchanged++;
     }
   }

@@ -93,3 +93,14 @@ test('全週都休息也能來回', () => {
   const allClosed = 每天();
   assert.deepEqual(parseHours(formatHours(allClosed)).hours, allClosed);
 });
+
+test('全形冒號、星期與時間之間沒有空格、單行的「24 小時營業」都能讀', () => {
+  assert.deepEqual(parseHours({ hours: '11：00-14：00' }).hours, 每天('11:00-14:00'));
+  const noSpace = `星期五11:00-14:00\n星期六休息\n星期日11:00-14:00\n星期一11:00-14:00\n星期二11:00-14:00\n星期三11:00-14:00\n星期四11:00-14:00`;
+  assert.deepEqual(parseHours({ hours: noSpace }).hours[5], ['11:00-14:00']);
+  assert.deepEqual(parseHours({ hours: '24 小時營業', closedDays: '日' }).hours, 每天('00:00-24:00').map((d, i) => (i === 0 ? [] : d)));
+});
+
+test('貼 Google 七行時又填了公休：回報衝突，不默默忽略', () => {
+  assert.match(parseHours({ hours: google, closedDays: '二' }).error, /公休/);
+});

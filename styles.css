@@ -158,3 +158,15 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .clay-btn { transition: none; }
 }
+
+/* 店家清單（檢視資料庫）：預設收起 */
+.place-list { padding: 14px 18px; }
+.place-list summary { cursor: pointer; font-weight: 800; }
+.place-list summary:focus-visible { outline: 3px solid var(--ink); outline-offset: 4px; border-radius: 8px; }
+.place-list-body { margin-top: 12px; display: flex; flex-direction: column; gap: 16px; }
+.place-list-body h2 { margin: 0 0 6px; font-size: 1.05rem; }
+.place-list-body h3 { margin: 10px 0 4px; font-size: 0.9rem; color: var(--ink-soft); }
+.place-list-body ul { margin: 0; padding: 0; list-style: none; }
+.place-list-body li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding: 4px 0; font-weight: 700; }
+.availability-inline { font-weight: 700; color: var(--ink-soft); }
+.availability-inline[data-state='later'] { color: var(--warn-text); }

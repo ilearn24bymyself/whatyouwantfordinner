@@ -1,5 +1,5 @@
 // 畫面：讀資料檔、呼叫抽籤、顯示結果。抽籤規則全部在 draw.js。
-import { draw, listDistricts, districtLabel } from './draw.js';
+import { draw, listDistricts, districtLabel, listPlaces } from './draw.js';
 import { visibleLayers, revealedAfterReroll, ALL } from './reveal.js';
 
 const TARGET = 500; // 熱量目標；第 05 張票改成可設定
@@ -51,6 +51,48 @@ function renderAvailability(availability) {
   el.hidden = !availability;
   el.textContent = availability ? availabilityText[availability.state](availability.time) : '';
   el.dataset.state = availability?.state ?? '';
+}
+
+// 店家清單裡的營業狀態文字（done / rest 只有清單用得到）
+const listAvailabilityText = {
+  open: availabilityText.open,
+  later: availabilityText.soon, // 文字相同；狀態名不同見 draw.js 的 listAvailability
+  done: () => '今天已打烊',
+  rest: () => '今天公休',
+};
+
+// 店家清單：展開時才用當下時間畫，狀態才準；不受任何篩選影響
+function renderPlaceList(data, now) {
+  const groups = listPlaces(data, { now });
+  $('placeListBody').replaceChildren(
+    ...groups.map((group) => {
+      const section = document.createElement('section');
+      const heading = document.createElement('h2');
+      heading.textContent = `${group.label}（${group.count} 家）`;
+      section.append(heading);
+      for (const meal of group.meals) {
+        const title = document.createElement('h3');
+        title.textContent = meal.name;
+        const list = document.createElement('ul');
+        for (const place of meal.places) {
+          const row = document.createElement('li');
+          const name = document.createElement('span');
+          name.textContent = place.name;
+          row.append(name);
+          if (place.availability) {
+            const status = document.createElement('small');
+            status.className = 'availability-inline';
+            status.dataset.state = place.availability.state;
+            status.textContent = listAvailabilityText[place.availability.state](place.availability.time);
+            row.append(status);
+          }
+          list.append(row);
+        }
+        section.append(title, list);
+      }
+      return section;
+    }),
+  );
 }
 
 // revealed：揭曉到第幾層（一次抽完 = ALL）。沒有點什麼資料的去哪吃只有兩層，見 reveal.js
@@ -183,6 +225,12 @@ async function main() {
   }
 
   setupDistrictChips(data);
+
+  const placeList = $('placeList');
+  placeList.hidden = false;
+  placeList.addEventListener('toggle', () => {
+    if (placeList.open) renderPlaceList(data, nowFromUrl() ?? new Date());
+  });
 
   // 定位在按下抽籤時才取得；「換」沿用最近一次抽籤的定位，不重新詢問，但開關關閉時從全部店換
   let position;

@@ -73,3 +73,8 @@ test('有座標的去哪吃一定有營業時間；沒有座標的品牌與便�
     else assert.equal(place.hours, undefined, `${place.name} 沒有座標卻寫了營業時間`);
   }
 });
+
+test('每個去哪吃的名字在整份資料裡不重複（店家清單才不會同一家列兩次）', () => {
+  const names = places.map((place) => place.name);
+  assert.equal(new Set(names).size, names.length, `重複的店名：${names.filter((n, i) => names.indexOf(n) !== i)}`);
+});

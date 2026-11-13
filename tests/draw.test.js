@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { draw, listDistricts, districtLabel } from '../src/draw.js';
+import { draw, listDistricts, districtLabel, listPlaces } from '../src/draw.js';
 
 // 固定亂數：讓測試每次結果相同
 function seeded(seed) {
@@ -639,4 +639,47 @@ test('彈芽麵（真實資料）：週二休息、週五中午不營業、週�
   assert.equal(at(new Date(2026, 10, 13, 12, 0)), null);
   assert.deepEqual(at(new Date(2026, 10, 13, 17, 0)).availability, { state: 'open', time: '20:50' });
   assert.deepEqual(at(週四(15, 30)).availability, { state: 'soon', time: '16:30' });
+});
+
+// ---- 店家清單（檢視資料庫）----
+const 清單資料 = {
+  meals: [
+    { name: '麵', places: [{ ...區的店('新店麵店', 新店, 1000), hours: 每天('11:00-14:00', '16:30-20:50') }, 區的店('中和麵店', 中和, 9000), { name: '麵連鎖' }] },
+    { name: '便當', places: [區的店('新店便當', 新店, 1500), { name: '便利商店' }] },
+    { name: '滷味', places: [區的店('中和滷味', 中和, 9500)] },
+  ],
+};
+
+test('店家清單：先依行政區分組（照資料出現順序），區內依吃什麼分類，每家店只出現一次', () => {
+  const groups = listPlaces(清單資料, { now: 週四(12, 0) });
+  assert.deepEqual(groups.map((g) => g.label), ['新店區', '中和區', '連鎖店與便利商店']);
+  assert.deepEqual(groups.map((g) => g.count), [2, 2, 2]);
+  assert.deepEqual(groups[0].meals.map((m) => [m.name, m.places.map((p) => p.name)]), [['麵', ['新店麵店']], ['便當', ['新店便當']]]);
+  assert.deepEqual(groups[1].meals.map((m) => [m.name, m.places.map((p) => p.name)]), [['麵', ['中和麵店']], ['滷味', ['中和滷味']]]);
+  assert.deepEqual(groups[2].meals.map((m) => [m.name, m.places.map((p) => p.name)]), [['麵', ['麵連鎖']], ['便當', ['便利商店']]]);
+  const all = groups.flatMap((g) => g.meals.flatMap((m) => m.places.map((p) => p.name)));
+  assert.equal(new Set(all).size, 6);
+});
+
+test('店家清單：沒有連鎖店時不出現連鎖店那一組；沒有營業時間的店沒有營業狀態', () => {
+  const groups = listPlaces({ meals: [{ name: '麵', places: [區的店('新店麵店', 新店, 1000)] }] }, { now: 週四(12, 0) });
+  assert.deepEqual(groups.map((g) => g.label), ['新店區']);
+  assert.equal(groups[0].meals[0].places[0].availability, undefined);
+});
+
+test('店家清單：營業狀態——營業中、快開（含單段店還沒開）、今天已打烊、今天公休', () => {
+  const shop = (hours) => listPlaces({ meals: [{ name: '麵', places: [{ ...區的店('店', 新店, 1000), hours }] }] }, { now: 週四(15, 30) })[0].meals[0].places[0].availability;
+  assert.deepEqual(shop(每天('11:00-18:00')), { state: 'open', time: '18:00' });
+  assert.deepEqual(shop(兩段), { state: 'later', time: '16:30' });
+  assert.deepEqual(shop(每天('16:30-20:00')), { state: 'later', time: '16:30' });
+  assert.deepEqual(shop(每天('08:00-14:00')), { state: 'done' });
+  assert.deepEqual(shop(每天()), { state: 'rest' });
+});
+
+test('店家清單：不受篩選影響，資料裡所有店都列出（真實資料）', () => {
+  const data = JSON.parse(readFileSync(new URL('../data/meals.json', import.meta.url), 'utf8'));
+  const total = data.meals.reduce((n, m) => n + m.places.length, 0);
+  const groups = listPlaces(data, { now: 週四(12, 0) });
+  assert.equal(groups.reduce((n, g) => n + g.count, 0), total);
+  assert.equal(groups.at(-1).label, '連鎖店與便利商店');
 });

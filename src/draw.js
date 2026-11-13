@@ -57,6 +57,11 @@ function minutesToClock(minutes) {
   return `${String(Math.floor(inDay / 60)).padStart(2, '0')}:${String(inDay % 60).padStart(2, '0')}`;
 }
 
+// 今天還沒開始的下一段（開門最早的那一段），沒有就是 undefined
+function nextSession(sessions, minute) {
+  return sessions.filter((s) => s.from > minute).sort((a, b) => a.from - b.from)[0];
+}
+
 // 現在這個時間，店的營業狀態：
 // { state: 'open', time: 打烊時間 } 營業中；{ state: 'soon', time: 下一場開門時間 } 快開（今天已有一段結束、後面還有下一段）；
 // null 不參加（還沒到開門時間的單段店、已打烊、公休）。開門時間算營業中，打烊那一分鐘起算已打烊。
@@ -72,7 +77,7 @@ function availabilityAt(hours, now) {
   if (current) return { state: 'open', time: minutesToClock(current.to) };
   // 快開：今天已經有一段營業結束（中間休息），後面還有下一段；單段店還沒到開門時間不算
   const ended = today.some((s) => s.to <= minute);
-  const later = today.filter((s) => s.from > minute).sort((a, b) => a.from - b.from)[0];
+  const later = nextSession(today, minute);
   return ended && later ? { state: 'soon', time: minutesToClock(later.from) } : null;
 }
 
@@ -164,4 +169,40 @@ export function listDistricts(data) {
 // 畫面只顯示區名：「新北市新店區」→「新店區」
 export function districtLabel(district) {
   return district.replace(/^.+?[市縣]/, '');
+}
+
+// 店家清單的營業狀態：open 營業中、later 現在沒營業但今天後面還有一段（含單段店還沒開門）、
+// done 今天已打烊、rest 今天公休。later 不等於抽籤的「快開」（soon）：清單是給人看全貌，所以單段店還沒開也標開門時間。
+function listAvailability(hours, now) {
+  const current = availabilityAt(hours, now);
+  if (current?.state === 'open') return current;
+  const sessions = parseSessions(hours[now.getDay()]);
+  const minute = now.getHours() * 60 + now.getMinutes();
+  const later = nextSession(sessions, minute);
+  if (later) return { state: 'later', time: minutesToClock(later.from) };
+  return { state: sessions.length ? 'done' : 'rest' };
+}
+
+const CHAIN_GROUP_LABEL = '連鎖店與便利商店';
+
+// 檢視資料庫：全部的店（不受任何篩選影響），先依行政區分組（照資料出現順序），沒有行政區的連鎖店與便利商店放最後；
+// 組內依吃什麼分類；每家店帶營業狀態（沒有營業時間的店沒有此欄）。
+export function listPlaces(data, { now = new Date() } = {}) {
+  const groups = new Map();
+  for (const meal of data.meals) {
+    for (const place of meal.places) {
+      const key = place.district ?? null;
+      if (!groups.has(key)) {
+        groups.set(key, { district: key, label: key ? districtLabel(key) : CHAIN_GROUP_LABEL, count: 0, meals: [] });
+      }
+      const group = groups.get(key);
+      let entry = group.meals.find((m) => m.name === meal.name);
+      if (!entry) group.meals.push((entry = { name: meal.name, places: [] }));
+      const availability = place.hours ? listAvailability(place.hours, now) : undefined;
+      entry.places.push(availability ? { name: place.name, availability } : { name: place.name });
+      group.count++;
+    }
+  }
+  const all = [...groups.values()];
+  return [...all.filter((g) => g.district), ...all.filter((g) => !g.district)];
 }

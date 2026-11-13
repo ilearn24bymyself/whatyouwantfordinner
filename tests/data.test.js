@@ -66,3 +66,10 @@ test('有營業時間的店：星期日到星期六七組，每組最多兩段 H
     }
   }
 });
+
+test('有座標的去哪吃一定有營業時間；沒有座標的品牌與便利商店不寫（視為隨時營業）', () => {
+  for (const place of places) {
+    if (place.lat !== undefined) assert.ok(place.hours, `${place.name} 沒有營業時間`);
+    else assert.equal(place.hours, undefined, `${place.name} 沒有座標卻寫了營業時間`);
+  }
+});

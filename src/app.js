@@ -110,6 +110,12 @@ function renderGroup(group) {
       const name = document.createElement('span');
       name.textContent = place.name;
       row.append(name);
+      if (place.address) {
+        const address = document.createElement('small');
+        address.className = 'place-address';
+        address.textContent = place.address;
+        row.append(address);
+      }
       if (place.availability) {
         const status = document.createElement('small');
         status.className = 'availability-inline';

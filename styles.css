@@ -172,3 +172,4 @@ body {
 .availability-inline[data-state='later'] { color: var(--warn-text); }
 .place-chips { margin-top: 12px; }
 .place-list-hint { margin: 12px 0 0; color: var(--ink-soft); font-weight: 700; }
+.place-address { flex-basis: 100%; order: 3; font-weight: 600; color: var(--ink-soft); }

@@ -692,3 +692,47 @@ test('店家清單的標籤：每組有固定的 key（行政區全名；連鎖�
   assert.deepEqual(selectGroups(groups, []), []);
   assert.deepEqual(selectGroups(groups, ['台北市北投區']), []);
 });
+
+// ---- 有行政區但沒座標的店（新增的店）----
+const 無座標區店 = (name, district) => ({ name, district });
+const 無座標資料 = {
+  meals: [
+    {
+      name: '麵',
+      places: [無座標區店('新店沒座標店', 新店), 無座標區店('中和沒座標店', 中和), 區的店('新店有座標店', 新店, 1000), { name: '麵連鎖' }],
+    },
+  ],
+};
+
+test('沒座標但有行政區的店：選了行政區就照行政區抽（選了別的區不參加）', () => {
+  assert.deepEqual([...placesSeen(無座標資料, { districts: [新店] })].sort(), ['新店沒座標店', '新店有座標店', '麵連鎖'].sort());
+  assert.deepEqual([...placesSeen(無座標資料, { districts: [中和], includeChains: false })], ['中和沒座標店']);
+});
+
+test('沒座標但有行政區的店：沒選行政區、有定位（只抽附近）時不參加；沒定位時參加', () => {
+  assert.deepEqual([...placesSeen(無座標資料, { position: 原點 })].sort(), ['新店有座標店', '麵連鎖'].sort());
+  assert.equal(placesSeen(無座標資料, {}).size, 4);
+});
+
+test('沒座標但有行政區的店不算連鎖店：關掉「包含連鎖店」仍照一般店參加', () => {
+  assert.deepEqual([...placesSeen(無座標資料, { includeChains: false })].sort(), ['新店沒座標店', '中和沒座標店', '新店有座標店'].sort());
+});
+
+test('沒座標但有行政區的店：重抽（換）沿用規則，有別的選項就一定換到不同的', () => {
+  const rng = seeded(95);
+  const options = { target: 500, rng, districts: [新店], includeChains: false };
+  for (let i = 0; i < 100; i++) {
+    const previous = draw(無座標資料, options);
+    const next = draw(無座標資料, { ...options, previous, reroll: 'place' });
+    assert.ok(['新店沒座標店', '新店有座標店'].includes(next.place));
+    assert.notEqual(next.place, previous.place);
+  }
+});
+
+test('店家清單：沒座標但有行政區的店歸在該行政區，有地址就帶出地址', () => {
+  const data = { meals: [{ name: '麵', places: [{ name: '士林店', district: '台北市士林區', address: '士林路1號' }, { name: '連鎖' }] }] };
+  const groups = listPlaces(data, { now: 週四(12, 0) });
+  assert.deepEqual(groups.map((g) => g.label), ['士林區', '連鎖店與便利商店']);
+  assert.equal(groups[0].meals[0].places[0].address, '士林路1號');
+  assert.equal(groups[1].meals[0].places[0].address, undefined);
+});

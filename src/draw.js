@@ -37,6 +37,8 @@ function distanceMeters(a, b) {
 }
 
 const hasCoordinates = (place) => Number.isFinite(place.lat) && Number.isFinite(place.lng);
+// 連鎖店／品牌：沒座標也沒行政區（不受距離限制）；有行政區但沒座標的是一般店
+const isChain = (place) => !hasCoordinates(place) && !place.district;
 
 // ---- 營業時間 ----
 // hours：星期日(0)到星期六(6)各一組營業時段，每段 "HH:MM-HH:MM"（結束時間可超過 24:00 表示跨午夜），空陣列＝整天休息。
@@ -82,16 +84,18 @@ function availabilityAt(hours, now) {
 }
 
 // 哪些去哪吃參加抽籤：
-// - 沒有座標（不受距離限制，例如連鎖店、便利商店；也沒有行政區）：includeChains 開著才參加
-// - 有座標，選了行政區：只留選定行政區的店，不看定位
-// - 有座標，沒選行政區：不給定位就都參加；給了定位只留附近的（只抽附近）
+// - 連鎖（沒座標也沒行政區，不受距離限制，例如連鎖店、便利商店）：includeChains 開著才參加
+// - 一般店，選了行政區：只留選定行政區的店，不看定位（有沒有座標都一樣）
+// - 一般店，沒選行政區：不給定位就都參加；給了定位只留附近的（只抽附近），沒座標的店算不出距離，不參加
 // 有營業時間的店，只有營業中或快開的才參加；沒有營業時間的（品牌、便利商店）視為隨時營業。
 // 沒有任何去哪吃的吃什麼不參加；全部都不剩時回傳空陣列（呼叫端顯示「沒有符合條件」，不退回全部）。
 function eligibleMeals(meals, { position, includeChains, districts, now }) {
   const wanted = (place) => {
     if (place.hours && !place.availability) return false; // 沒營業也不快開
-    if (!hasCoordinates(place)) return includeChains;
+    if (isChain(place)) return includeChains;
     if (districts.length > 0) return districts.includes(place.district);
+    // 有行政區但沒座標：算不出距離，所以只抽附近（有定位）時不參加
+    if (!hasCoordinates(place)) return !position;
     return !position || distanceMeters(position, place) <= NEARBY_RADIUS_M;
   };
   return meals
@@ -200,7 +204,10 @@ export function listPlaces(data, { now = new Date() } = {}) {
       let entry = group.meals.find((m) => m.name === meal.name);
       if (!entry) group.meals.push((entry = { name: meal.name, places: [] }));
       const availability = place.hours ? listAvailability(place.hours, now) : undefined;
-      entry.places.push(availability ? { name: place.name, availability } : { name: place.name });
+      const row = { name: place.name };
+      if (place.address) row.address = place.address;
+      if (availability) row.availability = availability;
+      entry.places.push(row);
       group.count++;
     }
   }

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { draw, listDistricts, districtLabel, listPlaces, selectGroups } from '../src/draw.js';
+import { draw, listDistricts, districtLabel, listPlaces, selectGroups, candidateFaces } from '../src/draw.js';
 
 // 固定亂數：讓測試每次結果相同
 function seeded(seed) {
@@ -862,4 +862,20 @@ test('上一次的區已不符合條件（改了篩選）：再換時改抽符�
 test('沒有舊的區資訊的 previous（舊資料）也不報錯，當作重抽', () => {
   const next = draw(區分層資料, { target: 500, rng: seeded(108), previous: { meal: '麵', place: '新店麵A', items: [] }, reroll: 'meal' });
   assert.ok(next.district);
+});
+
+test('動畫用的候選字：區是現在抽得到的區；吃什麼只有抽中那區有的；去哪吃只有抽中那區、那種吃什麼的店', () => {
+  const result = { districtKey: 新店, district: '新店區', meal: '麵', place: '新店麵A' };
+  const faces = candidateFaces(區分層資料, {}, result);
+  assert.deepEqual(faces.district.sort(), ['不限地點', '中和區', '新店區', '士林區'].sort());
+  assert.deepEqual(faces.meal.sort(), ['便當', '麵']);
+  assert.deepEqual(faces.place.sort(), ['新店麵A', '新店麵B']);
+});
+
+test('動畫用的候選字跟著篩選：選行政區、關連鎖，轉過的字都是真的抽得到的', () => {
+  const result = { districtKey: 中和, district: '中和區', meal: '麵', place: '中和麵' };
+  const faces = candidateFaces(區分層資料, { districts: [中和], includeChains: false }, result);
+  assert.deepEqual(faces.district, ['中和區']);
+  assert.deepEqual(faces.meal, ['麵']);
+  assert.deepEqual(faces.place, ['中和麵']);
 });

@@ -1,10 +1,15 @@
 // 畫面：讀資料檔、呼叫抽籤、顯示結果。抽籤規則全部在 draw.js。
-import { draw, listDistricts, districtLabel, listPlaces, selectGroups } from './draw.js';
+import { draw, listDistricts, districtLabel, listPlaces, selectGroups, candidateFaces } from './draw.js';
+import { parseSettings } from './settings.js';
+import { flickerDelays, firstAnimatedLayer } from './flicker.js';
 import { visibleLayers, revealedAfterReroll, ALL } from './reveal.js';
 
 const TARGET = 500; // 熱量目標；第 05 張票改成可設定
 
 const $ = (id) => document.getElementById(id);
+
+// 設定檔 data/settings.json 的招牌與結果提示（讀不到就不顯示）
+let settings = parseSettings();
 
 // 依抽籤回傳的 status 決定提示文字
 const verdictByStatus = {
@@ -147,6 +152,8 @@ function render(result, revealed) {
     renderSummary(result);
   }
   $('next').hidden = visible.done;
+  $('afterText').textContent = settings.after;
+  $('afterText').hidden = !(visible.done && settings.after); // 結果提示：整個結果揭曉完才出現
 
   $('result').hidden = false;
 }
@@ -261,6 +268,15 @@ async function main() {
     return;
   }
 
+  try {
+    const res = await fetch('data/settings.json', { cache: 'no-store' });
+    if (res.ok) settings = parseSettings(await res.json());
+  } catch {
+    // 設定檔讀不到或壞掉：不顯示招牌與提示
+  }
+  $('sign').textContent = settings.sign;
+  $('sign').hidden = !settings.sign;
+
   setupDistrictChips(data);
 
   setupPlaceList(data);
@@ -273,13 +289,73 @@ async function main() {
   let current;
   let revealed;
   let stepByStep = false;
+  // ---- 大字跳動：區、吃什麼、去哪吃一個接一個快速跳動、越來越慢，停在結果上 ----
+  const FACE_LAYERS = ['district', 'meal', 'place'];
+  let animating = false;
+  let skipRequested = false;
+  let finishCurrent = () => {};
+  const skipAnimation = () => {
+    skipRequested = true;
+    finishCurrent();
+  };
+  const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const controls = () => [$('drawAll'), $('drawStep'), $('next'), ...document.querySelectorAll('[data-reroll]')];
+
+  // 一個字的跳動：轉過 pool 裡的字，最後停在 finalText；skipAnimation 可以立刻停
+  const flicker = (element, pool, finalText) =>
+    new Promise((resolve) => {
+      const delays = flickerDelays();
+      let i = 0;
+      let timer;
+      const finish = () => {
+        clearTimeout(timer);
+        element.textContent = finalText;
+        element.classList.remove('spinning');
+        resolve();
+      };
+      finishCurrent = finish;
+      const step = () => {
+        if (i >= delays.length || pool.length < 2) return finish();
+        element.textContent = pool[Math.floor(Math.random() * pool.length)];
+        timer = setTimeout(step, delays[i++]);
+        return undefined;
+      };
+      element.classList.add('spinning');
+      step();
+    });
+
+  // fromLayer：從第幾層開始動（0 區、1 吃什麼、2 去哪吃），上面的層直接顯示；faces 是各層轉過的候選字
+  async function playReveal(result, fromLayer, faces) {
+    animating = true;
+    skipRequested = false;
+    controls().forEach((b) => (b.disabled = true));
+    try {
+      render(result, ALL); // 先擺好最終結果，再把要動的層蓋成跳動；點什麼、熱量、提示等動完才出現
+      for (const id of ['itemsLayer', 'summary', 'afterText']) $(id).hidden = true;
+      for (const layer of FACE_LAYERS.slice(fromLayer)) $(layer).textContent = '—'; // 還沒輪到的層先不顯示答案
+      for (const layer of FACE_LAYERS.slice(fromLayer)) {
+        if (skipRequested) break;
+        await flicker($(layer), faces[layer], result[layer]);
+      }
+    } finally {
+      animating = false; // 不論中間出什麼錯，按鈕都要救回來
+      controls().forEach((b) => (b.disabled = false));
+      render(result, ALL);
+    }
+  }
+
   // result 是 null＝篩完沒有符合條件的店：顯示提示，不顯示結果
-  const show = (result, nextRevealed) => {
+  // animateFrom 有給（且使用者沒開「減少動態效果」）就用大字跳動揭曉，從那一層開始動
+  const show = (result, nextRevealed, animateFrom, faces) => {
     current = result;
     revealed = nextRevealed;
     $('emptyMessage').hidden = result !== null;
     if (result === null) {
       $('result').hidden = true;
+      return;
+    }
+    if (animateFrom !== undefined && !reduceMotion()) {
+      playReveal(current, animateFrom, faces);
       return;
     }
     render(current, revealed);
@@ -294,9 +370,18 @@ async function main() {
     ...extra,
   });
 
+  // 抽一次並顯示。抽籤與動畫轉過的候選字用同一份條件，才不會對不上；
+  // animate(result) 回傳從哪一層開始跳（沒有就不跳，見 firstAnimatedLayer）
+  const drawAndShow = ({ extra, revealedAfter, animate }) => {
+    const options = drawOptions(extra);
+    const result = draw(data, options);
+    const from = result && animate ? animate(result) : undefined;
+    show(result, revealedAfter, from, from === undefined ? undefined : candidateFaces(data, options, result));
+  };
+
   // 按下抽籤：先取得定位（等待時按鈕變灰），再用同一套抽籤抽出完整結果
   const startDraw = async (isStepByStep) => {
-    if (locating) return;
+    if (locating || animating) return;
     locating = true;
     $('drawAll').disabled = true;
     $('drawStep').disabled = true;
@@ -309,19 +394,27 @@ async function main() {
     }
     stepByStep = isStepByStep;
     // 一次抽完：全部揭曉；逐層抽：只揭曉第一層
-    show(draw(data, drawOptions()), isStepByStep ? 1 : ALL);
+    drawAndShow({ revealedAfter: isStepByStep ? 1 : ALL, animate: isStepByStep ? undefined : () => 0 });
   };
   $('drawAll').addEventListener('click', () => startDraw(false));
   $('drawStep').addEventListener('click', () => startDraw(true));
 
   $('next').addEventListener('click', () => show(current, revealed + 1));
+  $('result').addEventListener('click', (event) => {
+    if (animating && !event.target.closest('button')) skipAnimation(); // 點一下結果就立刻停（按鈕不算，不然按「換」會立刻被略過）
+  });
 
   // 每一層的「換」：只重抽該層（含其下層），上層保留；逐層抽時下層蓋回去
   for (const button of document.querySelectorAll('[data-reroll]')) {
     const layer = button.dataset.reroll;
     button.addEventListener('click', () => {
-      if (locating) return;
-      show(draw(data, drawOptions({ previous: current, reroll: layer })), stepByStep ? revealedAfterReroll(layer) : ALL);
+      if (locating || animating) return;
+      const previous = current;
+      drawAndShow({
+        extra: { previous, reroll: layer },
+        revealedAfter: stepByStep ? revealedAfterReroll(layer) : ALL,
+        animate: stepByStep ? undefined : (result) => firstAnimatedLayer(layer, previous, result),
+      });
     });
   }
 }

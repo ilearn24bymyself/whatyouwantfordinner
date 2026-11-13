@@ -29,7 +29,7 @@ function get(urlPath, headers = {}) {
 }
 
 test('正常的頁面與資料檔可以讀', async () => {
-  for (const p of ['/', '/index.html', '/admin.html', '/styles.css', '/src/app.js', '/src/draw.js', '/data/meals.json']) {
+  for (const p of ['/', '/index.html', '/admin.html', '/styles.css', '/src/app.js', '/src/draw.js', '/data/meals.json', '/data/settings.json']) {
     assert.equal((await get(p)).status, 200, p);
   }
 });

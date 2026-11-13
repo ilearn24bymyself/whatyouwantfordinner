@@ -15,7 +15,7 @@ const mimeTypes = {
 };
 
 // 網頁需要的檔案：頁面、樣式、src 底下的程式、資料檔
-const STATIC_ALLOWED = /^\/(index\.html|admin\.html|styles\.css|data\/meals\.json|src\/[A-Za-z0-9._-]+\.js)$/;
+const STATIC_ALLOWED = /^\/(index\.html|admin\.html|styles\.css|data\/(meals|settings)\.json|src\/[A-Za-z0-9._-]+\.js)$/;
 
 function readBody(req) {
   return new Promise((resolve) => {

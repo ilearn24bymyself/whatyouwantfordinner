@@ -27,11 +27,10 @@ test('座標要嘛都沒有（不受距離限制），要嘛緯度經度成對�
   }
 });
 
-test('有座標的去哪吃一定有行政區（格式為縣市加區）；有行政區的可以沒座標；連鎖（沒座標也沒行政區）不寫營業時間', () => {
+test('有座標的去哪吃一定有行政區（格式為縣市加區）；有行政區的可以沒座標', () => {
   for (const place of places) {
     if (place.lat !== undefined) assert.ok(place.district, `${place.name} 有座標卻沒有行政區`);
     if (place.district !== undefined) assert.match(place.district, /^.+[市縣].+[區鄉鎮市]$/, `${place.name} 的行政區格式不對`);
-    if (place.lat === undefined && place.district === undefined) assert.equal(place.hours, undefined, `${place.name} 是連鎖卻寫了營業時間`);
   }
 });
 

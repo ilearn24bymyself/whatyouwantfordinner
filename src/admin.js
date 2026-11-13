@@ -44,14 +44,13 @@ async function save(nextRows) {
 }
 
 function summaryOf(row) {
-  if (row.連鎖 === '是') return '連鎖店';
-  const place = [row.行政區, row.座標 ? '有座標' : '無座標'].join('・');
   const hours = row.營業時間
     ? row.營業時間.includes('\n')
       ? '營業時間：每天不同'
       : `${row.營業時間}${row.公休 ? `（週${row.公休}休）` : ''}`
     : '隨時營業';
-  return `${place}｜${hours}`;
+  if (row.連鎖 === '是') return `連鎖店｜${hours}`;
+  return `${[row.行政區, row.座標 ? '有座標' : '無座標'].join('・')}｜${hours}`;
 }
 
 function renderRow(row) {
@@ -105,8 +104,9 @@ async function removeNames(names) {
 }
 
 // ---- 新增、編輯表單 ----
+// 連鎖店不填行政區、地址、座標（營業時間與公休仍可填）
 const syncChain = () => {
-  $('localFields').hidden = $('editForm').elements['連鎖'].checked;
+  $('placeOnlyFields').hidden = $('editForm').elements['連鎖'].checked;
 };
 
 function openForm(row) {
@@ -130,7 +130,7 @@ function readForm() {
     const input = $('editForm').elements[name];
     row[name] = name === '連鎖' ? (input.checked ? '是' : '') : input.value;
   }
-  if (row.連鎖 === '是') for (const name of ['行政區', '地址', '座標', '營業時間', '公休']) row[name] = '';
+  if (row.連鎖 === '是') for (const name of ['行政區', '地址', '座標']) row[name] = '';
   return row;
 }
 

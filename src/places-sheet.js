@@ -51,7 +51,8 @@ function parseRow(row) {
   if (chainText && !['是', '否'].includes(chainText)) fail('連鎖', `連鎖欄是連鎖店就填「是」，不是就留空（填「否」也可以），不能填「${chainText}」`);
   const place = { name };
   if (chainText === '是') {
-    const filled = ['行政區', '地址', '座標', '營業時間', '公休'].filter((column) => get(column));
+    // 連鎖店：不寫行政區、地址、座標；營業時間可以選填（例如只賣早餐的連鎖店）
+    const filled = ['行政區', '地址', '座標'].filter((column) => get(column));
     if (filled.length) fail('連鎖', `連鎖店不用填${filled.join('、')}`);
   } else {
     const district = get('行政區');
@@ -64,10 +65,10 @@ function parseRow(row) {
       else Object.assign(place, { lat: c.lat, lng: c.lng });
     }
     if (get('地址')) place.address = get('地址');
-    const parsed = parseHours({ hours: get('營業時間'), closedDays: get('公休') });
-    if (parsed.error) fail('營業時間', parsed.error);
-    else if (parsed.hours) place.hours = parsed.hours;
   }
+  const parsed = parseHours({ hours: get('營業時間'), closedDays: get('公休') });
+  if (parsed.error) fail('營業時間', parsed.error);
+  else if (parsed.hours) place.hours = parsed.hours;
   return errors.length ? { errors: errors.map((e) => ({ ...e, name })) } : { meal, place };
 }
 

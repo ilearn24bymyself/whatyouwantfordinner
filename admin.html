@@ -41,11 +41,13 @@
       <h2 id="formTitle">新增店家</h2>
       <label>類別<input name="類別" list="mealOptions" autocomplete="off" required></label>
       <label>店名<input name="店名" autocomplete="off" required></label>
-      <label class="inline"><input type="checkbox" name="連鎖" value="是"> 這是連鎖店／品牌（只要填類別和店名）</label>
-      <div id="localFields">
+      <label class="inline"><input type="checkbox" name="連鎖" value="是"> 這是連鎖店／品牌（不用填行政區、地址、座標；營業時間可填可不填）</label>
+      <div id="placeOnlyFields">
         <label>行政區（例如 台北市北投區）<input name="行政區" list="districtOptions" autocomplete="off"></label>
         <label>地址（選填，只當備註）<input name="地址" autocomplete="off"></label>
         <label>座標（選填，緯度, 經度；有填才能算「附近」）<input name="座標" autocomplete="off" placeholder="25.116015, 121.5178977"></label>
+      </div>
+      <div>
         <label>營業時間（留空＝隨時營業）
           <textarea name="營業時間" rows="4" placeholder="每天一樣：11:00-14:00、16:30-20:50（再填下面的公休）&#10;每天不同：直接貼上 Google 的七行"></textarea>
         </label>

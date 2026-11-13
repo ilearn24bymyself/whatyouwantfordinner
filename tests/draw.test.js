@@ -736,3 +736,16 @@ test('店家清單：沒座標但有行政區的店歸在該行政區，有地�
   assert.equal(groups[0].meals[0].places[0].address, '士林路1號');
   assert.equal(groups[1].meals[0].places[0].address, undefined);
 });
+
+// ---- 連鎖店也可以有營業時間 ----
+test('連鎖店有營業時間時，營業外不參加、營業中帶打烊時間；沒填營業時間的連鎖店照舊隨時參加', () => {
+  const data = { meals: [{ name: '早餐', places: [{ name: '早餐連鎖', hours: 每天('06:00-14:00') }, { name: '全天連鎖' }] }] };
+  assert.deepEqual([...placesSeen(data, { now: 週四(18, 0) }, 60)], ['全天連鎖']);
+  const morning = draw(data, { target: 500, rng: seeded(96), now: 週四(8, 0) });
+  assert.ok(['早餐連鎖', '全天連鎖'].includes(morning.place));
+  assert.deepEqual([...placesSeen(data, { now: 週四(8, 0) }, 100)].sort(), ['全天連鎖', '早餐連鎖']);
+  const only = { meals: [{ name: '早餐', places: [{ name: '早餐連鎖', hours: 每天('06:00-14:00') }] }] };
+  assert.deepEqual(draw(only, { target: 500, rng: seeded(97), now: 週四(8, 0) }).availability, { state: 'open', time: '14:00' });
+  assert.equal(draw(only, { target: 500, rng: seeded(97), now: 週四(18, 0) }), null);
+  assert.equal(draw(only, { target: 500, rng: seeded(97), now: 週四(8, 0), includeChains: false }), null);
+});

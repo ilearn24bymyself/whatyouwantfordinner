@@ -104,7 +104,8 @@ test('匯入錯誤：店名重複、連鎖店填了行政區或營業時間都�
   assert.equal(planImport({ meals: [] }, [a, { ...a, 類別: '飯' }]).errors[0].column, '店名');
   const chain = { 類別: '速食', 店名: 'C', 連鎖: '是' };
   assert.equal(planImport({ meals: [] }, [{ ...chain, 行政區: '台北市北投區' }]).errors[0].column, '連鎖');
-  assert.equal(planImport({ meals: [] }, [{ ...chain, 營業時間: '11:00-12:00' }]).errors[0].column, '連鎖');
+  assert.equal(planImport({ meals: [] }, [{ ...chain, 座標: '25.1, 121.5' }]).errors[0].column, '連鎖');
+  assert.equal(planImport({ meals: [] }, [{ ...chain, 地址: '某路' }]).errors[0].column, '連鎖');
 });
 
 test('輸出的檔案文字：一家店一行、可以被讀回、跟資料檔格式一致（含新增的店與地址）', () => {
@@ -136,4 +137,19 @@ test('資料檔裡鍵的順序不同，也不會把沒改的店誤判成更新',
   const shuffled = { meals: [{ name: '麵', places: [{ district: '台北市北投區', name: 'A' }] }] };
   const result = planImport(shuffled, placesToRows(shuffled));
   assert.deepEqual(result.plan, { added: [], updated: [], removed: [], unchanged: 1 });
+});
+
+test('連鎖店可以選填營業時間與公休（例如麥味登只賣早餐）；匯出匯入來回一致；公休沒搭營業時間仍是錯誤', () => {
+  const rows = [{ 類別: '早餐', 店名: '早餐連鎖', 連鎖: '是', 營業時間: '06:00-14:00', 公休: '日' }, { 類別: '速食', 店名: '全天連鎖', 連鎖: '是' }];
+  const { errors, data: next } = planImport({ meals: [] }, rows);
+  assert.deepEqual(errors, []);
+  const [breakfast] = next.meals[0].places;
+  assert.deepEqual(Object.keys(breakfast), ['name', 'hours']);
+  assert.deepEqual(breakfast.hours[0], []);
+  assert.deepEqual(breakfast.hours[1], ['06:00-14:00']);
+  assert.equal(next.meals[1].places[0].hours, undefined);
+  const back = planImport(next, placesToRows(next));
+  assert.deepEqual(back.plan, { added: [], updated: [], removed: [], unchanged: 2 });
+  assert.equal(placesToRows(next)[0].連鎖, '是');
+  assert.equal(planImport({ meals: [] }, [{ 類別: '速食', 店名: 'X', 連鎖: '是', 公休: '日' }]).errors[0].column, '營業時間');
 });

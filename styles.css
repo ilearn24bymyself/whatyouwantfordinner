@@ -124,6 +124,8 @@ body {
   min-width: 3.5em;
 }
 .value { font-size: 1.25rem; font-weight: 800; flex: 1; }
+.availability { display: block; margin-top: 4px; font-size: 0.9rem; font-weight: 700; color: var(--ink-soft); }
+.availability[data-state='soon'] { color: var(--warn-text); }
 
 .reroll {
   flex: none;

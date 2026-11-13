@@ -40,11 +40,25 @@ function renderSummary(result) {
   $('summary').dataset.status = result.status;
 }
 
+// 營業狀態文字：營業中顯示打烊時間，快開顯示下一場開門時間；沒有營業時間的店不顯示
+const availabilityText = {
+  open: (time) => `營業中，${time} 打烊`,
+  soon: (time) => `現在沒營業，${time} 開始`,
+};
+
+function renderAvailability(availability) {
+  const el = $('availability');
+  el.hidden = !availability;
+  el.textContent = availability ? availabilityText[availability.state](availability.time) : '';
+  el.dataset.state = availability?.state ?? '';
+}
+
 // revealed：揭曉到第幾層（一次抽完 = ALL）。沒有點什麼資料的去哪吃只有兩層，見 reveal.js
 function render(result, revealed) {
   const visible = visibleLayers(result, revealed);
   $('meal').textContent = result.meal;
   $('place').textContent = result.place;
+  renderAvailability(result.availability);
   $('mealLayer').hidden = !visible.meal;
   $('placeLayer').hidden = !visible.place;
   $('itemsLayer').hidden = !visible.items;
@@ -106,6 +120,13 @@ function positionFromUrl() {
   const lat = parseFloat(params.get('lat'));
   const lng = parseFloat(params.get('lng'));
   return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : undefined;
+}
+
+// 測試用：網址 ?now=2026-11-12T15:30 假裝現在的時間（畫面上沒有入口）；沒給或格式不對就用真實時間
+function nowFromUrl() {
+  const value = new URLSearchParams(location.search).get('now');
+  const fake = value ? new Date(value) : undefined;
+  return fake && !Number.isNaN(fake.getTime()) ? fake : undefined;
 }
 
 // 向手機要目前位置；拒絕、逾時、不支援、出錯都回 undefined（呼叫端會改從全部店抽）
@@ -186,6 +207,7 @@ async function main() {
     position: $('nearby').checked ? position : undefined,
     includeChains: $('chains').checked,
     districts: selectedDistricts(),
+    now: nowFromUrl() ?? new Date(), // 每次按下都取當下時間，營業狀態才準
     ...extra,
   });
 

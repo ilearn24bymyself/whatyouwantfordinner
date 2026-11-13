@@ -38,19 +38,65 @@ function distanceMeters(a, b) {
 
 const hasCoordinates = (place) => Number.isFinite(place.lat) && Number.isFinite(place.lng);
 
+// ---- 營業時間 ----
+// hours：星期日(0)到星期六(6)各一組營業時段，每段 "HH:MM-HH:MM"（結束時間可超過 24:00 表示跨午夜），空陣列＝整天休息。
+const MINUTES_PER_DAY = 1440;
+
+function parseSessions(sessions = []) {
+  return sessions.map((text) => {
+    const [from, to] = text.split('-').map((t) => {
+      const [h, m] = t.split(':').map(Number);
+      return h * 60 + m;
+    });
+    return { from, to };
+  });
+}
+
+function minutesToClock(minutes) {
+  const inDay = minutes % MINUTES_PER_DAY;
+  return `${String(Math.floor(inDay / 60)).padStart(2, '0')}:${String(inDay % 60).padStart(2, '0')}`;
+}
+
+// 現在這個時間，店的營業狀態：
+// { state: 'open', time: 打烊時間 } 營業中；{ state: 'soon', time: 下一場開門時間 } 快開（今天已有一段結束、後面還有下一段）；
+// null 不參加（還沒到開門時間的單段店、已打烊、公休）。開門時間算營業中，打烊那一分鐘起算已打烊。
+function availabilityAt(hours, now) {
+  const day = now.getDay();
+  const minute = now.getHours() * 60 + now.getMinutes();
+  const today = parseSessions(hours[day]);
+  const yesterday = parseSessions(hours[(day + 6) % 7]);
+  // 前一天跨午夜的時段，延伸到今天凌晨
+  const spill = yesterday.find((s) => s.to > MINUTES_PER_DAY && minute < s.to - MINUTES_PER_DAY);
+  if (spill) return { state: 'open', time: minutesToClock(spill.to) };
+  const current = today.find((s) => s.from <= minute && minute < s.to);
+  if (current) return { state: 'open', time: minutesToClock(current.to) };
+  // 快開：今天已經有一段營業結束（中間休息），後面還有下一段；單段店還沒到開門時間不算
+  const ended = today.some((s) => s.to <= minute);
+  const later = today.filter((s) => s.from > minute).sort((a, b) => a.from - b.from)[0];
+  return ended && later ? { state: 'soon', time: minutesToClock(later.from) } : null;
+}
+
 // 哪些去哪吃參加抽籤：
 // - 沒有座標（不受距離限制，例如連鎖店、便利商店；也沒有行政區）：includeChains 開著才參加
 // - 有座標，選了行政區：只留選定行政區的店，不看定位
 // - 有座標，沒選行政區：不給定位就都參加；給了定位只留附近的（只抽附近）
+// 有營業時間的店，只有營業中或快開的才參加；沒有營業時間的（品牌、便利商店）視為隨時營業。
 // 沒有任何去哪吃的吃什麼不參加；全部都不剩時回傳空陣列（呼叫端顯示「沒有符合條件」，不退回全部）。
-function eligibleMeals(meals, { position, includeChains, districts }) {
+function eligibleMeals(meals, { position, includeChains, districts, now }) {
   const wanted = (place) => {
+    if (place.hours && !place.availability) return false; // 沒營業也不快開
     if (!hasCoordinates(place)) return includeChains;
     if (districts.length > 0) return districts.includes(place.district);
     return !position || distanceMeters(position, place) <= NEARBY_RADIUS_M;
   };
   return meals
-    .map((meal) => ({ ...meal, places: meal.places.filter(wanted) }))
+    // 營業狀態只算一次，抽中後直接沿用（沒有營業時間的店沒有此欄）
+    .map((meal) => ({
+      ...meal,
+      places: meal.places
+        .map((place) => (place.hours ? { ...place, availability: availabilityAt(place.hours, now) } : place))
+        .filter(wanted),
+    }))
     .filter((meal) => meal.places.length > 0);
 }
 
@@ -65,11 +111,12 @@ export const LAYERS = ['meal', 'place', 'items'];
 
 // reroll：要重抽哪一層，該層以下跟著重抽，以上保留 previous（上一次的抽籤結果）。
 // 沒給 previous = 三層全抽（一次抽完）。position 是定位 { lat, lng }，給了就只抽附近；
-// includeChains 預設是，關掉就排除沒有座標的去哪吃；districts 是選定的行政區（空＝不限，見 eligibleMeals）。
+// includeChains 預設是，關掉就排除沒有座標的去哪吃；districts 是選定的行政區（空＝不限，見 eligibleMeals）；
+// now 是現在時間（Date，預設當下），只有營業中或快開的店參加；結果的 availability 說明營業狀態（沒有營業時間的店沒有此欄）。
 // 篩完一個去哪吃都不剩時回傳 null（沒有符合條件）。
 export function draw(
   data,
-  { target, rng = Math.random, previous, reroll = 'meal', position, includeChains = true, districts = [] },
+  { target, rng = Math.random, previous, reroll = 'meal', position, includeChains = true, districts = [], now = new Date() },
 ) {
   const level = LAYERS.indexOf(reroll);
   if (level < 0) throw new Error(`不認得的重抽層：${reroll}`);
@@ -77,7 +124,7 @@ export function draw(
   // 正好是要重抽的那一層：避開上一次的結果
   const previousName = { meal: previous?.meal, place: previous?.place, items: previous?.items?.[0]?.name };
   const avoid = (layer) => (layer === reroll ? previousName[layer] : undefined);
-  const meals = eligibleMeals(data.meals, { position, includeChains, districts });
+  const meals = eligibleMeals(data.meals, { position, includeChains, districts, now });
   if (meals.length === 0) return null;
 
   // 保留的層照名字找回來；找不到（例如資料檔改過）就當作重抽
@@ -86,8 +133,9 @@ export function draw(
     (keep('place') && meal.places.find((p) => p.name === previous.place)) || pickOther(meal.places, rng, avoid('place'));
 
   // 沒有點什麼資料的去哪吃（例如便利商店、家裡煮）：只回傳兩層，不做熱量判定
+  const { availability } = place;
   if (!place.items?.length) {
-    return { meal: meal.name, place: place.name, items: [], target };
+    return { meal: meal.name, place: place.name, items: [], target, availability };
   }
 
   const item = pickOther(place.items, rng, avoid('items'));
@@ -103,6 +151,7 @@ export function draw(
     range,
     diff: totalKcal - target,
     status: kcalStatus(totalKcal, range),
+    availability,
   };
 }
 

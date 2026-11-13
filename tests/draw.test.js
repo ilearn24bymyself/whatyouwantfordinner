@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { draw, listDistricts, districtLabel } from '../src/draw.js';
 
 // 固定亂數：讓測試每次結果相同
@@ -499,4 +500,143 @@ test('抽完後改了行政區再重抽（換）：只在新選的區裡換，�
       assert.ok(inZhonghe.includes(next.place), `抽到 ${next.place}`);
     }
   }
+});
+
+// ---- 營業時間 ----
+// hours：星期日(0)到星期六(6)各一組營業時段，每段 "HH:MM-HH:MM"，空陣列＝整天休息；結束時間可超過 24:00 表示跨午夜
+const 每天 = (...sessions) => Array.from({ length: 7 }, () => sessions);
+// 2026-11-12 是星期四；2026-11-10 是星期二
+const 週四 = (h, m) => new Date(2026, 10, 12, h, m);
+const 週二 = (h, m) => new Date(2026, 10, 10, h, m);
+function 營業店(hours) {
+  return { meals: [{ name: '麵', places: [{ ...有座標('兩段店', 1000), hours }, { name: '品牌' }] }] };
+}
+const 兩段 = 每天('11:00-13:55', '16:30-20:50');
+// 只看那家店（不含品牌）在 now 時間的抽籤結果
+const 抽營業店 = (hours, now, seed = 80) => draw(營業店(hours), { target: 500, rng: seeded(seed), now, includeChains: false });
+
+test('營業中的店參加抽籤，結果標明「營業中」與打烊時間', () => {
+  const result = 抽營業店(兩段, 週四(11, 30), 81);
+  assert.equal(result.place, '兩段店');
+  assert.deepEqual(result.availability, { state: 'open', time: '13:55' });
+  assert.equal(抽營業店(兩段, 週四(18, 0), 81).availability.time, '20:50');
+});
+
+test('兩段店中間休息時是「快開」，結果標明下一場開門時間', () => {
+  const result = 抽營業店(兩段, 週四(15, 30), 82);
+  assert.deepEqual(result.availability, { state: 'soon', time: '16:30' });
+});
+
+test('單段店還沒到營業時間、最後一段已打烊，都不參加', () => {
+  const 單段 = 每天('16:30-20:50');
+  assert.equal(抽營業店(單段, 週四(15, 30), 83), null);
+  assert.equal(抽營業店(兩段, 週四(21, 0), 83), null);
+});
+
+test('今天公休的店不參加，即使其他天有營業', () => {
+  const hours = 兩段.map((day, i) => (i === 2 ? [] : day));
+  assert.equal(抽營業店(hours, 週二(12, 0), 84), null);
+  assert.equal(抽營業店(hours, 週四(12, 0), 84).place, '兩段店');
+});
+
+test('開門時間算營業中，打烊時間整點起算已打烊', () => {
+  const 單段 = 每天('16:30-20:50');
+  assert.equal(抽營業店(單段, 週四(16, 30), 85).availability.state, 'open');
+  assert.equal(抽營業店(單段, 週四(20, 49), 85).availability.state, 'open');
+  assert.equal(抽營業店(單段, 週四(20, 50), 85), null);
+});
+
+test('跨午夜的營業時段：開門當天晚上與隔天凌晨都算營業中，打烊時間顯示當天時鐘', () => {
+  const hours = 每天('18:00-26:00'); // 到隔天凌晨 2 點
+  const evening = 抽營業店(hours, 週四(23, 0), 86);
+  assert.deepEqual(evening.availability, { state: 'open', time: '02:00' });
+  const lateNight = 抽營業店(hours, new Date(2026, 10, 13, 1, 0), 86);
+  assert.deepEqual(lateNight.availability, { state: 'open', time: '02:00' });
+  assert.equal(抽營業店(hours, new Date(2026, 10, 13, 2, 0), 86), null);
+});
+
+test('沒有跨午夜的時段時，凌晨不會被誤認營業中，單段店也不算快開', () => {
+  const hours = 每天('18:00-20:00');
+  assert.equal(抽營業店(hours, 週四(1, 0), 87), null);
+});
+
+test('沒有營業時間的去哪吃（品牌、便利商店）一律參加，結果沒有營業狀態', () => {
+  const seen = placesSeen(營業店(每天()), { now: 週四(3, 0) }, 60);
+  assert.deepEqual([...seen], ['品牌']);
+  const result = draw({ meals: [{ name: '麵', places: [{ name: '品牌' }] }] }, { target: 500, rng: seeded(88), now: 週四(3, 0) });
+  assert.equal(result.availability, undefined);
+});
+
+test('沒營業的吃什麼不參加，其餘吃什麼仍等機率', () => {
+  const data = {
+    meals: [
+      { name: 'A', places: [{ name: 'A店', hours: 每天('08:00-10:00') }] },
+      { name: 'B', places: [{ name: 'B店', hours: 每天('11:00-14:00') }, { name: 'B店2', hours: 每天('11:00-14:00') }] },
+      { name: 'C', places: [{ name: 'C品牌' }] },
+    ],
+  };
+  const rng = seeded(89);
+  const counts = { A: 0, B: 0, C: 0 };
+  const N = 6000;
+  for (let i = 0; i < N; i++) counts[draw(data, { target: 500, rng, now: 週四(12, 0) }).meal]++;
+  assert.equal(counts.A, 0);
+  for (const name of ['B', 'C']) assert.ok(Math.abs(counts[name] / N - 0.5) < 0.03, `${name} 佔 ${counts[name] / N}`);
+});
+
+test('營業時間與行政區、定位篩選一起生效', () => {
+  const data = {
+    meals: [
+      {
+        name: '麵',
+        places: [
+          { ...區的店('開著的新店店', 新店, 1000), hours: 每天('09:00-22:00') },
+          { ...區的店('關著的新店店', 新店, 1100), hours: 每天('05:00-07:00') },
+          { ...區的店('開著的中和店', 中和, 9000), hours: 每天('09:00-22:00') },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual([...placesSeen(data, { now: 週四(12, 0), districts: [新店] }, 100)], ['開著的新店店']);
+  assert.deepEqual([...placesSeen(data, { now: 週四(12, 0), position: 原點 }, 100)], ['開著的新店店']);
+});
+
+test('重抽（換）也依 now 篩選：只換到營業中或快開的店，原本的店已打烊時改抽別家', () => {
+  const data = {
+    meals: [
+      {
+        name: '麵',
+        places: [
+          { name: '甲', hours: 每天('09:00-22:00') },
+          { name: '乙', hours: 每天('09:00-22:00') },
+          { name: '丙', hours: 每天('05:00-07:00') },
+        ],
+      },
+    ],
+  };
+  const rng = seeded(90);
+  for (let i = 0; i < 100; i++) {
+    const previous = draw(data, { target: 500, rng, now: 週四(12, 0) });
+    const next = draw(data, { target: 500, rng, now: 週四(12, 0), previous, reroll: 'place' });
+    assert.ok(['甲', '乙'].includes(next.place));
+    assert.notEqual(next.place, previous.place);
+    assert.equal(next.availability.state, 'open');
+    const afterClose = draw(data, { target: 500, rng, now: 週四(23, 0), previous: { meal: '麵', place: '甲', items: [] }, reroll: 'items' });
+    assert.equal(afterClose, null);
+  }
+});
+
+test('不給 now 時使用現在時間，不報錯', () => {
+  const result = draw(營業店(每天('00:00-30:00')), { target: 500, rng: seeded(91), includeChains: false });
+  assert.equal(result.availability.state, 'open');
+});
+
+// 真實資料：彈芽麵週二休、週五只有晚上 16:30–20:50（Maps 的 04:30 是輸入錯誤）
+test('彈芽麵（真實資料）：週二休息、週五中午不營業、週五 17:00 營業中', () => {
+  const data = JSON.parse(readFileSync(new URL('../data/meals.json', import.meta.url), 'utf8'));
+  const 只有彈芽麵 = { meals: [{ name: '麵', places: data.meals.flatMap((m) => m.places).filter((p) => p.name === '彈芽麵') }] };
+  const at = (now) => draw(只有彈芽麵, { target: 500, rng: seeded(92), now, includeChains: false });
+  assert.equal(at(週二(12, 0)), null);
+  assert.equal(at(new Date(2026, 10, 13, 12, 0)), null);
+  assert.deepEqual(at(new Date(2026, 10, 13, 17, 0)).availability, { state: 'open', time: '20:50' });
+  assert.deepEqual(at(週四(15, 30)).availability, { state: 'soon', time: '16:30' });
 });

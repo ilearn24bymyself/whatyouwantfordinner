@@ -47,3 +47,22 @@ test('資料檔實際列出的行政區（目前資料）', () => {
     '台北市南港區',
   ]);
 });
+
+test('有營業時間的店：星期日到星期六七組，每組最多兩段 HH:MM-HH:MM，開門早於打烊，且不重疊', () => {
+  const toMinutes = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+  for (const place of places) {
+    if (place.hours === undefined) continue;
+    assert.equal(place.hours.length, 7, `${place.name} 的營業時間不是七天`);
+    for (const day of place.hours) {
+      assert.ok(Array.isArray(day) && day.length <= 2, `${place.name} 一天最多兩段`);
+      let lastEnd = -1;
+      for (const session of day) {
+        assert.match(session, /^\d{2}:[0-5]\d-\d{2}:[0-5]\d$/, `${place.name} 的時段格式不對：${session}`);
+        const [from, to] = session.split('-').map(toMinutes);
+        assert.ok(from >= 0 && from < 1440 && to > from && to <= 2880, `${place.name} 的時段不合理：${session}`);
+        assert.ok(from >= lastEnd, `${place.name} 的時段重疊：${session}`);
+        lastEnd = to;
+      }
+    }
+  }
+});

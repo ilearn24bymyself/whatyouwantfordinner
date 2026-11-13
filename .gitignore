@@ -1,3 +1,6 @@
 node_modules/
 .env
 *.log
+data/places.xlsx
+data/places.xls
+data/*.bak

@@ -4,7 +4,7 @@ import { LAYERS } from './draw.js';
 
 export const ALL = Infinity;
 
-// 沒有點什麼資料的去哪吃只有「吃什麼、去哪吃」兩層
+// 沒有點什麼資料的去哪吃只有「區、吃什麼、去哪吃」三層
 const LAYERS_WITHOUT_ITEMS = LAYERS.indexOf('items');
 
 // 回傳每一塊要不要顯示（熱量方塊跟著 items 一起顯示或隱藏），以及是否已揭曉完畢
@@ -12,7 +12,7 @@ export function visibleLayers(result, revealed) {
   const layerCount = result.items.length > 0 ? LAYERS.length : LAYERS_WITHOUT_ITEMS;
   const shown = Math.min(revealed, layerCount);
   const reached = (layer) => shown > LAYERS.indexOf(layer);
-  return { meal: reached('meal'), place: reached('place'), items: reached('items'), done: shown >= layerCount };
+  return { district: reached('district'), meal: reached('meal'), place: reached('place'), items: reached('items'), done: shown >= layerCount };
 }
 
 // 逐層抽時重抽某一層：揭曉到那一層為止，下層蓋回去等再揭曉

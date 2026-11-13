@@ -450,13 +450,14 @@ test('選了行政區、不包含連鎖店：只剩該區的店', () => {
   );
 });
 
-test('選了行政區：該區沒有店的吃什麼不參加，其餘吃什麼仍等機率', () => {
+test('選了行政區：該區沒有店的吃什麼不參加，區裡其餘的吃什麼仍等機率', () => {
   const rng = seeded(71);
   const counts = { 麵: 0, 便當: 0, 滷味: 0, 速食: 0 };
-  const N = 9000;
-  for (let i = 0; i < N; i++) counts[draw(區資料, { target: 500, rng, districts: [新店] }).meal]++;
+  const N = 6000;
+  for (let i = 0; i < N; i++) counts[draw(區資料, { target: 500, rng, districts: [新店], includeChains: false }).meal]++;
   assert.equal(counts.便當, 0);
-  for (const name of ['麵', '滷味', '速食']) assert.ok(Math.abs(counts[name] / N - 1 / 3) < 0.03, `${name} 佔 ${counts[name] / N}`);
+  assert.equal(counts.速食, 0);
+  for (const name of ['麵', '滷味']) assert.ok(Math.abs(counts[name] / N - 1 / 2) < 0.03, `${name} 佔 ${counts[name] / N}`);
 });
 
 test('選了資料裡沒有店的行政區、又不包含連鎖店：回傳 null', () => {
@@ -748,4 +749,117 @@ test('連鎖店有營業時間時，營業外不參加、營業中帶打烊時�
   assert.deepEqual(draw(only, { target: 500, rng: seeded(97), now: 週四(8, 0) }).availability, { state: 'open', time: '14:00' });
   assert.equal(draw(only, { target: 500, rng: seeded(97), now: 週四(18, 0) }), null);
   assert.equal(draw(only, { target: 500, rng: seeded(97), now: 週四(8, 0), includeChains: false }), null);
+});
+
+// ---- 抽籤第 1 層：區 ----
+const 台北士林 = '台北市士林區';
+const 區分層資料 = {
+  meals: [
+    { name: '麵', places: [區的店('新店麵A', 新店, 1000), 區的店('新店麵B', 新店, 1100), 區的店('中和麵', 中和, 9000)] },
+    { name: '便當', places: [區的店('新店便當', 新店, 1200), 區的店('士林便當', 台北士林, 20000)] },
+    { name: '速食', places: [{ name: '麥當勞' }] },
+  ],
+};
+const 區頻率 = (data, options, n = 8000) => {
+  const rng = seeded(101);
+  const counts = {};
+  for (let i = 0; i < n; i++) {
+    const r = draw(data, { target: 500, rng, ...options });
+    counts[r.district] = (counts[r.district] ?? 0) + 1;
+  }
+  return Object.fromEntries(Object.entries(counts).map(([k, v]) => [k, v / n]));
+};
+
+test('結果多一個區：行政區顯示區名，連鎖店顯示「不限地點」；店一定在抽到的區裡', () => {
+  const rng = seeded(102);
+  const seen = new Set();
+  for (let i = 0; i < 300; i++) {
+    const r = draw(區分層資料, { target: 500, rng });
+    seen.add(r.district);
+    const place = 區分層資料.meals.flatMap((m) => m.places).find((p) => p.name === r.place);
+    assert.equal(districtLabel(place.district ?? '不限地點'), r.district === '不限地點' ? '不限地點' : r.district);
+    assert.equal(r.districtKey, place.district ?? 'chains');
+  }
+  assert.deepEqual([...seen].sort(), ['不限地點', '中和區', '新店區', '士林區'].sort());
+});
+
+test('區依符合條件的店數加權：新店 3 家、中和 1 家、士林 1 家、連鎖 1 家（共 6 家）', () => {
+  const freq = 區頻率(區分層資料, {});
+  assert.ok(Math.abs(freq.新店區 - 3 / 6) < 0.03, `新店區 ${freq.新店區}`);
+  for (const name of ['中和區', '士林區', '不限地點']) assert.ok(Math.abs(freq[name] - 1 / 6) < 0.03, `${name} ${freq[name]}`);
+});
+
+test('區的範圍跟著篩選：選行政區只剩那幾區；關掉連鎖就沒有「不限地點」', () => {
+  assert.deepEqual(Object.keys(區頻率(區分層資料, { districts: [中和] }, 500)).sort(), ['不限地點', '中和區']);
+  assert.deepEqual(Object.keys(區頻率(區分層資料, { districts: [中和, 台北士林], includeChains: false }, 500)).sort(), ['中和區', '士林區']);
+});
+
+test('只抽附近時，區只會出現附近有店的區', () => {
+  // 新店店在 1000～1200 公尺內，中和 9000、士林 20000 公尺外
+  assert.deepEqual(Object.keys(區頻率(區分層資料, { position: 原點 }, 500)).sort(), ['不限地點', '新店區']);
+});
+
+test('營業時間不符的店不算數：整個區都沒營業，區就不會出現', () => {
+  const data = {
+    meals: [{ name: '麵', places: [{ ...區的店('開著的', 新店, 1000), hours: 每天('09:00-22:00') }, { ...區的店('關著的', 中和, 2000), hours: 每天('05:00-07:00') }] }],
+  };
+  assert.deepEqual(Object.keys(區頻率(data, { now: 週四(12, 0) }, 200)), ['新店區']);
+});
+
+test('區抽好之後，吃什麼只從那一區有的裡面抽', () => {
+  const rng = seeded(103);
+  for (let i = 0; i < 300; i++) {
+    const r = draw(區分層資料, { target: 500, rng });
+    if (r.district === '士林區') assert.equal(r.meal, '便當');
+    if (r.district === '中和區') assert.equal(r.meal, '麵');
+    if (r.district === '不限地點') assert.equal(r.meal, '速食');
+  }
+});
+
+test('換區：三層都重抽，有別的區就一定換到不同的區', () => {
+  const rng = seeded(104);
+  for (let i = 0; i < 200; i++) {
+    const previous = draw(區分層資料, { target: 500, rng });
+    const next = draw(區分層資料, { target: 500, rng, previous, reroll: 'district' });
+    assert.notEqual(next.districtKey, previous.districtKey);
+  }
+});
+
+test('換吃什麼：區不變；那一區有別的吃什麼就一定換掉，只有一種就維持', () => {
+  const rng = seeded(105);
+  for (let i = 0; i < 300; i++) {
+    const previous = draw(區分層資料, { target: 500, rng });
+    const next = draw(區分層資料, { target: 500, rng, previous, reroll: 'meal' });
+    assert.equal(next.districtKey, previous.districtKey);
+    if (previous.districtKey === 新店) assert.notEqual(next.meal, previous.meal); // 新店有麵與便當
+    else assert.equal(next.meal, previous.meal); // 其他區只有一種
+  }
+});
+
+test('換去哪吃：區與吃什麼都不變；有別的店就一定換掉', () => {
+  const rng = seeded(106);
+  for (let i = 0; i < 300; i++) {
+    const previous = draw(區分層資料, { target: 500, rng });
+    const next = draw(區分層資料, { target: 500, rng, previous, reroll: 'place' });
+    assert.equal(next.districtKey, previous.districtKey);
+    assert.equal(next.meal, previous.meal);
+    if (previous.place.startsWith('新店麵')) assert.notEqual(next.place, previous.place);
+  }
+});
+
+test('上一次的區已不符合條件（改了篩選）：再換時改抽符合條件的區，不報錯', () => {
+  const rng = seeded(107);
+  for (let i = 0; i < 100; i++) {
+    const previous = draw(區分層資料, { target: 500, rng, districts: [新店], includeChains: false });
+    for (const reroll of ['district', 'meal', 'place', 'items']) {
+      const next = draw(區分層資料, { target: 500, rng, districts: [中和], includeChains: false, previous, reroll });
+      assert.equal(next.districtKey, 中和);
+      assert.equal(next.place, '中和麵');
+    }
+  }
+});
+
+test('沒有舊的區資訊的 previous（舊資料）也不報錯，當作重抽', () => {
+  const next = draw(區分層資料, { target: 500, rng: seeded(108), previous: { meal: '麵', place: '新店麵A', items: [] }, reroll: 'meal' });
+  assert.ok(next.district);
 });

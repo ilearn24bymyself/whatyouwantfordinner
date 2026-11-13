@@ -115,36 +115,75 @@ function pickOther(list, rng, avoidName) {
   return pick(others.length ? others : list, rng);
 }
 
-// 可以重抽的層，由上到下：吃什麼、去哪吃、點什麼（index.html 的 data-reroll 也用這三個）
-export const LAYERS = ['meal', 'place', 'items'];
+// 可以重抽的層，由上到下：區、吃什麼、去哪吃、點什麼（index.html 的 data-reroll 也用這幾個）
+export const LAYERS = ['district', 'meal', 'place', 'items'];
+
+// 沒有行政區的店（連鎖店、便利商店）歸在「不限地點」這一區
+export const CHAIN_DISTRICT_KEY = 'chains';
+export const CHAIN_DISTRICT_LABEL = '不限地點';
+
+// 把符合條件的店依區分組：[{ key, label, count, meals: [{ name, places }] }]，依資料出現順序
+function groupByDistrict(meals) {
+  const groups = new Map();
+  for (const meal of meals) {
+    for (const place of meal.places) {
+      const key = place.district ?? CHAIN_DISTRICT_KEY;
+      if (!groups.has(key)) {
+        groups.set(key, { key, label: key === CHAIN_DISTRICT_KEY ? CHAIN_DISTRICT_LABEL : districtLabel(key), count: 0, meals: [] });
+      }
+      const group = groups.get(key);
+      let entry = group.meals.find((m) => m.name === meal.name);
+      if (!entry) group.meals.push((entry = { name: meal.name, places: [] }));
+      entry.places.push(place);
+      group.count++;
+    }
+  }
+  return [...groups.values()];
+}
+
+// 依店數加權抽一個區；有別的區就避開 avoidKey（重抽一定看得到變化）
+function pickDistrict(groups, rng, avoidKey) {
+  const others = groups.filter((g) => g.key !== avoidKey);
+  const pool = others.length ? others : groups;
+  let r = rng() * pool.reduce((sum, g) => sum + g.count, 0);
+  for (const group of pool) {
+    r -= group.count;
+    if (r < 0) return group;
+  }
+  return pool[pool.length - 1];
+}
 
 // reroll：要重抽哪一層，該層以下跟著重抽，以上保留 previous（上一次的抽籤結果）。
-// 沒給 previous = 三層全抽（一次抽完）。position 是定位 { lat, lng }，給了就只抽附近；
-// includeChains 預設是，關掉就排除沒有座標的去哪吃；districts 是選定的行政區（空＝不限，見 eligibleMeals）；
+// 沒給 previous = 全抽（一次抽完）。position 是定位 { lat, lng }，給了就只抽附近；
+// includeChains 預設是，關掉就排除連鎖店；districts 是選定的行政區（空＝不限，見 eligibleMeals）；
 // now 是現在時間（Date，預設當下），只有營業中或快開的店參加；結果的 availability 說明營業狀態（沒有營業時間的店沒有此欄）。
+// 抽法：先照所有篩選算出符合條件的店，再依區分組、依店數加權抽一個區；區裡的吃什麼等機率、再等機率抽店。
 // 篩完一個去哪吃都不剩時回傳 null（沒有符合條件）。
 export function draw(
   data,
-  { target, rng = Math.random, previous, reroll = 'meal', position, includeChains = true, districts = [], now = new Date() },
+  { target, rng = Math.random, previous, reroll = 'district', position, includeChains = true, districts = [], now = new Date() },
 ) {
   const level = LAYERS.indexOf(reroll);
   if (level < 0) throw new Error(`不認得的重抽層：${reroll}`);
   const keep = (layer) => Boolean(previous) && LAYERS.indexOf(layer) < level;
   // 正好是要重抽的那一層：避開上一次的結果
-  const previousName = { meal: previous?.meal, place: previous?.place, items: previous?.items?.[0]?.name };
+  const previousName = { district: previous?.districtKey, meal: previous?.meal, place: previous?.place, items: previous?.items?.[0]?.name };
   const avoid = (layer) => (layer === reroll ? previousName[layer] : undefined);
   const meals = eligibleMeals(data.meals, { position, includeChains, districts, now });
   if (meals.length === 0) return null;
+  const groups = groupByDistrict(meals);
 
-  // 保留的層照名字找回來；找不到（例如資料檔改過）就當作重抽
-  const meal = (keep('meal') && meals.find((m) => m.name === previous.meal)) || pickOther(meals, rng, avoid('meal'));
+  // 保留的層照名字找回來；找不到（例如改了篩選、資料檔改過）就當作重抽
+  const group = (keep('district') && groups.find((g) => g.key === previous.districtKey)) || pickDistrict(groups, rng, avoid('district'));
+  const meal = (keep('meal') && group.meals.find((m) => m.name === previous.meal)) || pickOther(group.meals, rng, avoid('meal'));
   const place =
     (keep('place') && meal.places.find((p) => p.name === previous.place)) || pickOther(meal.places, rng, avoid('place'));
+  const base = { district: group.label, districtKey: group.key, meal: meal.name, place: place.name };
 
-  // 沒有點什麼資料的去哪吃（例如便利商店、家裡煮）：只回傳兩層，不做熱量判定
+  // 沒有點什麼資料的去哪吃（例如便利商店、家裡煮）：不回傳點什麼，也不做熱量判定
   const { availability } = place;
   if (!place.items?.length) {
-    return { meal: meal.name, place: place.name, items: [], target, availability };
+    return { ...base, items: [], target, availability };
   }
 
   const item = pickOther(place.items, rng, avoid('items'));
@@ -152,8 +191,7 @@ export function draw(
   const totalKcal = item.kcal;
   const range = toleranceRange(target);
   return {
-    meal: meal.name,
-    place: place.name,
+    ...base,
     items,
     totalKcal,
     target,

@@ -133,9 +133,11 @@ function renderGroup(group) {
 // revealed：揭曉到第幾層（一次抽完 = ALL）。沒有點什麼資料的去哪吃只有兩層，見 reveal.js
 function render(result, revealed) {
   const visible = visibleLayers(result, revealed);
+  $('district').textContent = result.district;
   $('meal').textContent = result.meal;
   $('place').textContent = result.place;
   renderAvailability(result.availability);
+  $('districtLayer').hidden = !visible.district;
   $('mealLayer').hidden = !visible.meal;
   $('placeLayer').hidden = !visible.place;
   $('itemsLayer').hidden = !visible.items;

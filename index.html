@@ -32,6 +32,11 @@
     <p id="emptyMessage" class="clay notice" role="status" hidden>沒有符合條件的店。可以試試勾選「包含連鎖店與便利商店」，或關掉「只抽附近的店」。</p>
 
     <section id="result" class="result" hidden aria-live="polite">
+      <div class="clay layer" id="districtLayer">
+        <span class="label">區</span>
+        <span class="value" id="district"></span>
+        <button class="clay-btn reroll" type="button" data-reroll="district" aria-label="換區">換</button>
+      </div>
       <div class="clay layer" id="mealLayer">
         <span class="label">吃什麼</span>
         <span class="value" id="meal"></span>

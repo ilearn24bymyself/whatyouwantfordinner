@@ -184,6 +184,7 @@ function listAvailability(hours, now) {
 }
 
 const CHAIN_GROUP_LABEL = '連鎖店與便利商店';
+const CHAIN_GROUP_KEY = 'chains';
 
 // 檢視資料庫：全部的店（不受任何篩選影響），先依行政區分組（照資料出現順序），沒有行政區的連鎖店與便利商店放最後；
 // 組內依吃什麼分類；每家店帶營業狀態（沒有營業時間的店沒有此欄）。
@@ -193,7 +194,7 @@ export function listPlaces(data, { now = new Date() } = {}) {
     for (const place of meal.places) {
       const key = place.district ?? null;
       if (!groups.has(key)) {
-        groups.set(key, { district: key, label: key ? districtLabel(key) : CHAIN_GROUP_LABEL, count: 0, meals: [] });
+        groups.set(key, { key: key ?? CHAIN_GROUP_KEY, district: key, label: key ? districtLabel(key) : CHAIN_GROUP_LABEL, count: 0, meals: [] });
       }
       const group = groups.get(key);
       let entry = group.meals.find((m) => m.name === meal.name);
@@ -205,4 +206,9 @@ export function listPlaces(data, { now = new Date() } = {}) {
   }
   const all = [...groups.values()];
   return [...all.filter((g) => g.district), ...all.filter((g) => !g.district)];
+}
+
+// 店家清單的標籤：只留 keys 選到的組（key 是行政區全名，連鎖店組是 'chains'），維持原順序；都不選就不列任何組。
+export function selectGroups(groups, keys) {
+  return groups.filter((group) => keys.includes(group.key));
 }

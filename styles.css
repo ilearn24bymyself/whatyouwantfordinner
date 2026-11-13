@@ -170,3 +170,5 @@ body {
 .place-list-body li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding: 4px 0; font-weight: 700; }
 .availability-inline { font-weight: 700; color: var(--ink-soft); }
 .availability-inline[data-state='later'] { color: var(--warn-text); }
+.place-chips { margin-top: 12px; }
+.place-list-hint { margin: 12px 0 0; color: var(--ink-soft); font-weight: 700; }

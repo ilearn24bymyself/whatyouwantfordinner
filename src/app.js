@@ -1,5 +1,5 @@
 // 畫面：讀資料檔、呼叫抽籤、顯示結果。抽籤規則全部在 draw.js。
-import { draw, listDistricts, districtLabel, listPlaces } from './draw.js';
+import { draw, listDistricts, districtLabel, listPlaces, selectGroups } from './draw.js';
 import { visibleLayers, revealedAfterReroll, ALL } from './reveal.js';
 
 const TARGET = 500; // 熱量目標；第 05 張票改成可設定
@@ -61,38 +61,67 @@ const listAvailabilityText = {
   rest: () => '今天公休',
 };
 
-// 店家清單：展開時才用當下時間畫，狀態才準；不受任何篩選影響
-function renderPlaceList(data, now) {
-  const groups = listPlaces(data, { now });
-  $('placeListBody').replaceChildren(
-    ...groups.map((group) => {
-      const section = document.createElement('section');
-      const heading = document.createElement('h2');
-      heading.textContent = `${group.label}（${group.count} 家）`;
-      section.append(heading);
-      for (const meal of group.meals) {
-        const title = document.createElement('h3');
-        title.textContent = meal.name;
-        const list = document.createElement('ul');
-        for (const place of meal.places) {
-          const row = document.createElement('li');
-          const name = document.createElement('span');
-          name.textContent = place.name;
-          row.append(name);
-          if (place.availability) {
-            const status = document.createElement('small');
-            status.className = 'availability-inline';
-            status.dataset.state = place.availability.state;
-            status.textContent = listAvailabilityText[place.availability.state](place.availability.time);
-            row.append(status);
-          }
-          list.append(row);
-        }
-        section.append(title, list);
-      }
-      return section;
+// 店家清單（口袋名單檢視，與抽籤無關）：第一眼是一排行政區標籤（標家數，連鎖店在最後），點了才列那一區的店。
+// 標籤在清單內獨立運作，不影響首頁的抽籤條件。店的營業狀態每次展開或點標籤時，用當下時間重畫。
+function setupPlaceList(data) {
+  const details = $('placeList');
+  details.hidden = false;
+  const selectedKeys = () => [...document.querySelectorAll('#placeChips input:checked')].map((input) => input.value);
+
+  const renderBody = () => {
+    const groups = listPlaces(data, { now: nowFromUrl() ?? new Date() });
+    const chosen = selectGroups(groups, selectedKeys());
+    $('placeListHint').hidden = chosen.length > 0;
+    $('placeListBody').replaceChildren(...chosen.map(renderGroup));
+  };
+
+  // 標籤只建一次（資料不會變）
+  $('placeChips').replaceChildren(
+    ...listPlaces(data).map((group) => {
+      const label = document.createElement('label');
+      label.className = 'chip';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = group.key;
+      input.autocomplete = 'off';
+      input.addEventListener('change', renderBody);
+      const text = document.createElement('span');
+      text.textContent = `${group.label} ${group.count}`;
+      label.append(input, text);
+      return label;
     }),
   );
+  details.addEventListener('toggle', () => {
+    if (details.open) renderBody();
+  });
+}
+
+function renderGroup(group) {
+  const section = document.createElement('section');
+  const heading = document.createElement('h2');
+  heading.textContent = `${group.label}（${group.count} 家）`;
+  section.append(heading);
+  for (const meal of group.meals) {
+    const title = document.createElement('h3');
+    title.textContent = meal.name;
+    const list = document.createElement('ul');
+    for (const place of meal.places) {
+      const row = document.createElement('li');
+      const name = document.createElement('span');
+      name.textContent = place.name;
+      row.append(name);
+      if (place.availability) {
+        const status = document.createElement('small');
+        status.className = 'availability-inline';
+        status.dataset.state = place.availability.state;
+        status.textContent = listAvailabilityText[place.availability.state](place.availability.time);
+        row.append(status);
+      }
+      list.append(row);
+    }
+    section.append(title, list);
+  }
+  return section;
 }
 
 // revealed：揭曉到第幾層（一次抽完 = ALL）。沒有點什麼資料的去哪吃只有兩層，見 reveal.js
@@ -226,11 +255,7 @@ async function main() {
 
   setupDistrictChips(data);
 
-  const placeList = $('placeList');
-  placeList.hidden = false;
-  placeList.addEventListener('toggle', () => {
-    if (placeList.open) renderPlaceList(data, nowFromUrl() ?? new Date());
-  });
+  setupPlaceList(data);
 
   // 定位在按下抽籤時才取得；「換」沿用最近一次抽籤的定位，不重新詢問，但開關關閉時從全部店換
   let position;

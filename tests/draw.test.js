@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { draw, listDistricts, districtLabel, listPlaces } from '../src/draw.js';
+import { draw, listDistricts, districtLabel, listPlaces, selectGroups } from '../src/draw.js';
 
 // 固定亂數：讓測試每次結果相同
 function seeded(seed) {
@@ -682,4 +682,13 @@ test('店家清單：不受篩選影響，資料裡所有店都列出（真實�
   const groups = listPlaces(data, { now: 週四(12, 0) });
   assert.equal(groups.reduce((n, g) => n + g.count, 0), total);
   assert.equal(groups.at(-1).label, '連鎖店與便利商店');
+});
+
+test('店家清單的標籤：每組有固定的 key（行政區全名；連鎖店組是 chains），依 key 選組、保持原順序，都不選＝不列任何組', () => {
+  const groups = listPlaces(清單資料, { now: 週四(12, 0) });
+  assert.deepEqual(groups.map((g) => g.key), [新店, 中和, 'chains']);
+  assert.deepEqual(selectGroups(groups, [中和]).map((g) => g.label), ['中和區']);
+  assert.deepEqual(selectGroups(groups, ['chains', 新店]).map((g) => g.label), ['新店區', '連鎖店與便利商店']);
+  assert.deepEqual(selectGroups(groups, []), []);
+  assert.deepEqual(selectGroups(groups, ['台北市北投區']), []);
 });

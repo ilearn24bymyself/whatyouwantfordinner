@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>名單管理</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app admin">
+    <header class="title">
+      <h1>名單管理</h1>
+      <p class="sub">只在這台電腦使用。改完資料檔會變，記得自己 commit。</p>
+    </header>
+
+    <p><a href="index.html">← 回首頁</a></p>
+    <p id="adminError" class="error" hidden></p>
+    <p id="adminMessage" class="clay notice" role="status" hidden></p>
+
+    <div id="adminActions" class="admin-actions">
+      <button id="addBtn" class="clay clay-btn" type="button">＋ 新增店家</button>
+      <button id="deleteSelected" class="clay clay-btn" type="button" disabled>刪除選取（0）</button>
+      <a id="exportBtn" class="clay clay-btn" href="/api/export.xlsx" download>匯出 Excel</a>
+      <label class="clay clay-btn">匯入 Excel<input id="importFile" type="file" accept=".xlsx,.xls" hidden></label>
+    </div>
+
+    <section id="importPreview" class="clay admin-box" hidden>
+      <h2>匯入預覽</h2>
+      <p id="importSummary"></p>
+      <ul id="importDetail" class="admin-detail"></ul>
+      <div class="admin-actions">
+        <button id="importApply" class="clay clay-btn" type="button">套用</button>
+        <button id="importCancel" class="clay clay-btn" type="button">取消</button>
+      </div>
+    </section>
+
+    <form id="editForm" class="clay admin-box admin-form" hidden>
+      <h2 id="formTitle">新增店家</h2>
+      <label>類別<input name="類別" list="mealOptions" autocomplete="off" required></label>
+      <label>店名<input name="店名" autocomplete="off" required></label>
+      <label class="inline"><input type="checkbox" name="連鎖" value="是"> 這是連鎖店／品牌（只要填類別和店名）</label>
+      <div id="localFields">
+        <label>行政區（例如 台北市北投區）<input name="行政區" list="districtOptions" autocomplete="off"></label>
+        <label>地址（選填，只當備註）<input name="地址" autocomplete="off"></label>
+        <label>座標（選填，緯度, 經度；有填才能算「附近」）<input name="座標" autocomplete="off" placeholder="25.116015, 121.5178977"></label>
+        <label>營業時間（留空＝隨時營業）
+          <textarea name="營業時間" rows="4" placeholder="每天一樣：11:00-14:00、16:30-20:50（再填下面的公休）&#10;每天不同：直接貼上 Google 的七行"></textarea>
+        </label>
+        <label>公休（每天一樣時才用，例如 二、四）<input name="公休" autocomplete="off"></label>
+      </div>
+      <ul id="formErrors" class="admin-errors" hidden></ul>
+      <div class="admin-actions">
+        <button class="clay clay-pink clay-btn" type="submit">儲存</button>
+        <button id="formCancel" class="clay clay-btn" type="button">取消</button>
+      </div>
+    </form>
+
+    <section id="placesList" class="admin-list" aria-label="全部店家"></section>
+    <datalist id="mealOptions"></datalist>
+    <datalist id="districtOptions"></datalist>
+  </main>
+  <script type="module" src="src/admin.js"></script>
+</body>
+</html>

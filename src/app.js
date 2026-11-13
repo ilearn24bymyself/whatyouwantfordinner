@@ -262,6 +262,8 @@ async function main() {
   setupDistrictChips(data);
 
   setupPlaceList(data);
+  // 管理名單的入口只在自己電腦（本機網址）出現，上線的網頁看不到
+  $('adminLinkBox').hidden = !['127.0.0.1', 'localhost'].includes(location.hostname);
 
   // 定位在按下抽籤時才取得；「換」沿用最近一次抽籤的定位，不重新詢問，但開關關閉時從全部店換
   let position;

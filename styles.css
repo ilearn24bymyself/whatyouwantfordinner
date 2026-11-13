@@ -173,3 +173,22 @@ body {
 .place-chips { margin-top: 12px; }
 .place-list-hint { margin: 12px 0 0; color: var(--ink-soft); font-weight: 700; }
 .place-address { flex-basis: 100%; order: 3; font-weight: 600; color: var(--ink-soft); }
+
+/* 管理頁（只在本機） */
+.admin { max-width: 760px; }
+.admin-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.admin-actions .clay-btn { text-decoration: none; color: inherit; padding: 8px 16px; }
+.admin-box { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.admin-box h2 { margin: 0; font-size: 1.1rem; }
+.admin-form label { display: flex; flex-direction: column; gap: 4px; font-weight: 700; }
+.admin-form label.inline { flex-direction: row; align-items: center; gap: 8px; }
+.admin-form input:not([type='checkbox']), .admin-form textarea { font: inherit; padding: 8px 10px; border-radius: 12px; border: 2px solid rgba(0, 0, 0, 0.1); }
+.admin-errors, .admin-detail { margin: 0; padding-left: 1.2em; color: var(--warn-text); font-weight: 700; }
+.admin-detail { color: var(--ink); }
+.admin-list { display: flex; flex-direction: column; gap: 10px; }
+.admin-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
+.admin-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.admin-row-detail { color: var(--ink-soft); font-weight: 600; overflow-wrap: anywhere; }
+.clay-btn.small { padding: 4px 12px; font-size: 0.9rem; }
+.error { white-space: pre-line; }
+.admin-link { text-align: center; }
